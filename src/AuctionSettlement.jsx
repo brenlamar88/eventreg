@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
-  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle,
+  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X,
 } from "lucide-react";
 
 /* ============================================================================
@@ -105,6 +105,11 @@ const Styles = () => (
     .amt-in{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none;width:90px;text-align:right;}
     .amt-in:focus{border-color:var(--pine);}
     .trash{background:none;border:none;cursor:pointer;color:#a23b1c;}
+    .edit-btn{background:none;border:none;cursor:pointer;color:var(--inkSoft);padding:2px;}
+    .edit-btn:hover{color:var(--pine);}
+    .edit-row td{background:#f0f4f0;padding:14px 12px;border-bottom:2px solid var(--pine);}
+    .edit-grid{display:grid;grid-template-columns:80px 1fr 160px 160px 100px 160px 100px 100px auto;gap:10px;align-items:end;}
+    @media(max-width:1100px){.edit-grid{grid-template-columns:repeat(3,1fr);}}
     .grand{margin-top:18px;background:var(--pine);color:#EAF1EC;border-radius:14px;padding:18px 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
     @media(max-width:760px){.grand{grid-template-columns:repeat(2,1fr);}}
     .grand .l{font-size:11px;color:var(--goldSoft);text-transform:uppercase;letter-spacing:.08em;font-weight:600;}
@@ -136,6 +141,11 @@ export default function AuctionSettlement() {
   const [form, setForm] = useState(blankForm);
   const [consignorSel, setConsignorSel] = useState("");
   const [buyerSel, setBuyerSel] = useState("");
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const setEF = (k, v) => setEditForm((p) => ({ ...p, [k]: v }));
+  const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated }); };
+  const cancelEdit = () => { setEditId(null); setEditForm({}); };
 
   const connected = db === "live";
   const hdr = () => ({ "Content-Type": "application/json", "x-organizer-key": passcode });
@@ -143,6 +153,23 @@ export default function AuctionSettlement() {
   const findRanch = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).ranch || "";
   const onNameChange = (which, v) => setForm((p) => ({ ...p, [which + "Name"]: v, [which + "Ranch"]: findRanch(v) || p[which + "Ranch"] }));
   const rememberPerson = (name, ranch) => { if (name) setPeople((prev) => prev.some((p) => p.name.toLowerCase() === name.toLowerCase()) ? prev : [...prev, { name, ranch: ranch || "" }]); };
+
+  const saveLotEdit = async () => {
+    const patch = {
+      lotNo: editForm.lotNo.trim(), description: editForm.description.trim(),
+      category: editForm.donated ? "Donated" : editForm.category,
+      consignorName: editForm.consignorName.trim(), consignorRanch: editForm.consignorRanch.trim(),
+      donated: editForm.donated,
+      consignor: display(editForm.consignorName.trim(), editForm.consignorRanch.trim()),
+    };
+    setLots((p) => p.map((l) => l.id === editId ? { ...l, ...patch } : l));
+    if (connected && typeof editId === "string" && !editId.startsWith("tmp-")) {
+      try {
+        await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
+      } catch {}
+    }
+    cancelEdit();
+  };
 
   /* ---- connect: load lots + fee + registered people ---- */
   const connect = async () => {
@@ -282,15 +309,38 @@ export default function AuctionSettlement() {
                   <React.Fragment key={g.name}>
                     <tr className="grp2"><td colSpan={11}>{g.name}</td></tr>
                     {g.ls.map((l) => { const c = calc(l, eventFee); const status = l.checkNo ? "paid" : l.delivered ? "ready" : "wait"; return (
-                      <tr key={l.id}>
+                      <React.Fragment key={l.id}>
+                      <tr>
                         <td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td>
                         <td><input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} /></td>
                         <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
                         <td><button className={`ci ${l.delivered ? "on" : ""}`} onClick={() => setLot(l.id, { delivered: !l.delivered, ...(l.delivered ? { checkNo: "", checkDate: "" } : {}) })}>{l.delivered ? <CheckCircle2 size={16} /> : <Circle size={16} />}<span className={`badge ${status === "paid" ? "b-paid" : status === "ready" ? "b-ready" : "b-wait"}`}>{status === "paid" ? "Paid" : status === "ready" ? "Ready" : "Awaiting"}</span></button></td>
                         <td><input className="mini" value={l.checkNo} disabled={!l.delivered} placeholder="—" onChange={(e) => setLot(l.id, { checkNo: e.target.value })} /></td>
                         <td><input className="mini" type="date" value={l.checkDate} disabled={!l.delivered} onChange={(e) => setLot(l.id, { checkDate: e.target.value })} /></td>
-                        <td><button className="trash" onClick={() => delLot(l.id)}><Trash2 size={15} /></button></td>
-                      </tr>); })}
+                        <td style={{whiteSpace:"nowrap"}}>
+                          <button className="edit-btn" title="Edit lot" onClick={() => editId === l.id ? cancelEdit() : startEdit(l)}>{editId === l.id ? <X size={15} /> : <Pencil size={15} />}</button>
+                          <button className="trash" onClick={() => delLot(l.id)}><Trash2 size={15} /></button>
+                        </td>
+                      </tr>
+                      {editId === l.id && (
+                        <tr className="edit-row">
+                          <td colSpan={11}>
+                            <div className="edit-grid">
+                              <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
+                              <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
+                              <div className="f"><label>Category</label><select style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.category} disabled={editForm.donated} onChange={(e) => setEF("category", e.target.value)}>{CATEGORIES.map((cat) => <option key={cat}>{cat}</option>)}</select></div>
+                              <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
+                              <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
+                              <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => setEF("donated", e.target.checked)} /> 100% donation to EWA</label></div>
+                              <div className="f" style={{flexDirection:"row",gap:8,alignItems:"flex-end"}}>
+                                <button className="btn" style={{fontSize:13,padding:"7px 14px"}} onClick={saveLotEdit}><Check size={14}/> Save</button>
+                                <button className="btn ghost" style={{fontSize:13,padding:"7px 12px"}} onClick={cancelEdit}><X size={14}/> Cancel</button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>); })}
                     <tr className="sub"><td colSpan={3}>Subtotal — {g.name}</td><td className="num">{money(g.t.lotTotal)}</td><td className="num">{money(g.t.fees)}</td><td className="num">{money(g.t.commission)}</td><td className="num">{money(g.t.net)}</td><td colSpan={4}></td></tr>
                   </React.Fragment>
                 ))}
