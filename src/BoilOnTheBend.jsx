@@ -118,8 +118,11 @@ function rowsFromText(text) {
 function mapJotformRow(row) {
   const keys = Object.keys(row);
   const grab = (...needles) => { for (const n of needles) { const k = keys.find((h) => h.toLowerCase().includes(n)); if (k && row[k]) return String(row[k]).trim(); } return ""; };
-  let name = grab("full name", "name"); const first = grab("first"); const last = grab("last");
-  if ((!name || name.toLowerCase() === "name") && (first || last)) name = `${first} ${last}`.trim();
+  // Look for a standalone "name" or "full name" column, but never match "first name" / "last name"
+  const nameKey = keys.find((h) => { const l = h.toLowerCase(); return l === "name" || l === "full name" || (l.includes("name") && !l.includes("first") && !l.includes("last")); });
+  const first = grab("first"); const last = grab("last");
+  let name = (first || last) ? `${first} ${last}`.trim() : (nameKey && row[nameKey] ? String(row[nameKey]).trim() : "");
+  if (!name || name.toLowerCase() === "name") name = "";
   const partyRaw = grab("quantity", "tickets", "guests", "party", "# of");
   return {
     name: name || "Unnamed registrant", email: grab("email", "e-mail"),
