@@ -54,6 +54,7 @@ const dbRowToUI = (r) => ({
   id: r.id, name: r.name, email: r.email, phone: r.phone, party: r.party,
   source: r.source, status: r.status, amount: Number(r.amount) || 0,
   checkedIn: r.checked_in, date: (r.created_at || "").slice(0, 10),
+  notes: r.notes || null,
 });
 
 /* ============================================================================
@@ -130,6 +131,7 @@ function mapJotformRow(row) {
     party: Math.max(1, parseInt(partyRaw, 10) || 1), source: "Jotform",
     status: grab("paid", "payment").toLowerCase().includes("paid") ? "Paid" : "Pending",
     amount: 0, checkedIn: false, date: grab("submission date", "date") || "",
+    notes: grab("notes", "note", "ranch", "affiliation", "organization", "company", "group") || null,
   };
 }
 
@@ -431,7 +433,7 @@ export default function BoilOnTheBend() {
     const mapped = raw.map(mapJotformRow).filter((r) => r.email || r.name !== "Unnamed registrant");
     let written = 0;
     for (const m of mapped) {
-      try { await dbInsert({ name: m.name, email: m.email, phone: m.phone, party: m.party, source: "Jotform", status: m.status, amount: m.amount }); written++; }
+      try { await dbInsert({ name: m.name, email: m.email, phone: m.phone, party: m.party, source: "Jotform", status: m.status, amount: m.amount, notes: m.notes || null }); written++; }
       catch (err) { /* preview / offline */ }
     }
     setRoster((r) => [...mapped, ...r]); setImportText("");
@@ -742,7 +744,7 @@ export default function BoilOnTheBend() {
                 const idx = roster.indexOf(p);
                 return (
                   <tr key={p.id || i}>
-                    <td style={{ fontWeight: 700 }}>{p.name}</td>
+                    <td style={{ fontWeight: 700 }}>{p.name}{p.notes && <div style={{ fontSize: 11.5, color: "var(--inkSoft)", fontWeight: 400, marginTop: 2 }}>{p.notes}</div>}</td>
                     <td style={{ color: "var(--inkSoft)" }}>{p.email}<br /><span style={{ fontSize: 12 }}>{p.phone}</span></td>
                     <td>{p.party || 1}</td>
                     <td><span className={`badge-s ${p.source === "Jotform" ? "b-jot" : p.source === "Comp" ? "b-comp" : "b-onl"}`}>{p.source}</span></td>
