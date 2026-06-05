@@ -44,14 +44,15 @@ export default async function handler(req, res) {
     const s = event.data.object;
     const row = {
       event_id: s.metadata?.eventId || "boil85",
-      name: s.customer_details?.name || null,
+      name: s.metadata?.name || s.customer_details?.name || null,
       email: s.customer_email || s.customer_details?.email || null,
-      phone: s.customer_details?.phone || null,
+      phone: s.metadata?.phone || s.customer_details?.phone || null,
       party: parseInt(s.metadata?.party || "1", 10),
-      source: "Online",
+      source: s.metadata?.source || "Online",
       status: "Paid",
       amount: (s.amount_total || 0) / 100,
       stripe_session_id: s.id,
+      checked_in: s.metadata?.checkedIn === "true",
     };
     try {
       await fetch(`${process.env.SUPABASE_URL}/rest/v1/registrants`, {

@@ -3,6 +3,7 @@ import {
   Calendar, MapPin, Check, ChevronRight, ChevronLeft, Users, Plus, Minus,
   ShieldCheck, Lock, Trash2, UserPlus, Search, CheckCircle2, Circle,
   Upload, Heart, LayoutGrid, Ticket, Database, RefreshCw, AlertTriangle,
+  ScanLine, CreditCard,
 } from "lucide-react";
 
 /* ============================================================================
@@ -68,6 +69,20 @@ async function startStripeCheckout({ lineItems, email, total, party, name, phone
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, total, lineItems, party, name, phone, eventId: TICKET.id }),
+  });
+  if (!res.ok) throw new Error("Checkout session could not be created.");
+  const { url } = await res.json();
+  window.location.href = url;
+}
+
+async function startStripeWalkIn({ name, phone, party, total, lineItems }) {
+  const res = await fetch(STRIPE_CONFIG.checkoutEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name, phone, party, total, lineItems,
+      eventId: TICKET.id, source: "Walk-in", walkin: true,
+    }),
   });
   if (!res.ok) throw new Error("Checkout session could not be created.");
   const { url } = await res.json();
@@ -255,6 +270,20 @@ const Styles = () => (
     .importbox{background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:20px;margin-bottom:22px;}
     .importbox textarea{width:100%;min-height:96px;font-family:ui-monospace,monospace;font-size:12.5px;border:1.5px solid var(--line);border-radius:10px;padding:12px;outline:none;resize:vertical;background:#fff;}
     .importbox textarea:focus{border-color:var(--pine);}
+    .door-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px;}
+    @media(max-width:500px){.door-stats{grid-template-columns:1fr 1fr;}}
+    .door-result{display:flex;align-items:center;gap:16px;padding:16px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+    .door-result:last-child{border-bottom:none;}
+    .door-ci-btn{font-family:inherit;font-weight:700;font-size:15px;padding:13px 22px;border-radius:12px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;transition:.2s;background:var(--pine);color:#fff;white-space:nowrap;}
+    .door-ci-btn:hover{background:var(--pine2);}
+    .door-ci-btn.done{background:var(--ok);cursor:default;}
+    .door-flash{background:#e4f0e9;color:var(--ok);border:1.5px solid #b8dcc6;border-radius:12px;padding:14px 18px;font-weight:600;font-size:14px;display:flex;align-items:center;gap:9px;margin-bottom:18px;animation:rise .3s ease;}
+    .pay-toggle{display:flex;border:1.5px solid var(--line);border-radius:11px;overflow:hidden;}
+    .pay-toggle button{flex:1;font-family:inherit;font-weight:600;font-size:14px;padding:11px 18px;border:none;background:#fff;cursor:pointer;transition:.15s;color:var(--inkSoft);}
+    .pay-toggle button.on{background:var(--pine);color:#fff;}
+    .walkin-row{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--line);font-size:13.5px;flex-wrap:wrap;}
+    .walkin-row:last-child{border-bottom:none;}
+    .door-section-h{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--pine);font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
   `}</style>
 );
 
@@ -290,6 +319,15 @@ export default function BoilOnTheBend() {
   const [dbState, setDbState] = useState("idle"); // idle | loading | live | offline
   const [dbMsg, setDbMsg] = useState("");
 
+  // Door view state
+  const [doorUnlocked, setDoorUnlocked] = useState(false);
+  const [doorSearch, setDoorSearch] = useState("");
+  const [doorFlash, setDoorFlash] = useState(null);
+  const [walkInForm, setWalkInForm] = useState({ name: "", phone: "", party: 1, payment: "cash" });
+  const [walkInMsg, setWalkInMsg] = useState("");
+  const [walkInLoading, setWalkInLoading] = useState(false);
+  const [walkIns, setWalkIns] = useState([]);
+
   const qty = attendees.length;
   const ticketsTotal = qty * TICKET.price;
   const total = ticketsTotal + (Number(donation) || 0);
@@ -302,7 +340,21 @@ export default function BoilOnTheBend() {
   /* handle Stripe redirect return (live mode) */
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
-    if (p.get("status") === "success") setStep(3);
+    if (p.get("status") === "success") {
+      if (p.get("walkin") === "1") {
+        const saved = sessionStorage.getItem("doorKey") || "";
+        if (saved) {
+          setPasscode(saved);
+          setDoorUnlocked(true);
+          setView("door");
+          loadRoster(saved);
+          setWalkInMsg("Walk-in payment complete — they've been added to the roster.");
+        }
+      } else {
+        setStep(3);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setQty = (n) => { n = Math.max(1, Math.min(20, n)); setAttendees((prev) => { const a = [...prev]; while (a.length < n) a.push(blankAtt()); while (a.length > n) a.pop(); return a; }); };
@@ -356,10 +408,10 @@ export default function BoilOnTheBend() {
   const back = () => { setStep((s) => s - 1); setErrors({}); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
   /* ---- DB-backed roster ---- */
-  const loadRoster = async () => {
+  const loadRoster = async (pc = passcode) => {
     setDbState("loading"); setDbMsg("");
     try {
-      const r = await fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } });
+      const r = await fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": pc } });
       if (!r.ok) throw new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`);
       const rows = await r.json();
       setRoster(rows.map(dbRowToUI));
@@ -403,10 +455,242 @@ export default function BoilOnTheBend() {
       <span className="brandtag">{EVENT.org}</span>
       <div className="vtoggle">
         <button className={view === "register" ? "on" : ""} onClick={() => setView("register")}><Ticket size={15} /> Register</button>
+        <button className={view === "door" ? "on" : ""} onClick={() => setView("door")}><ScanLine size={15} /> Door</button>
         <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}><LayoutGrid size={15} /> Organizer</button>
       </div>
     </div></div>
   );
+
+  /* ---------- DOOR CHECK-IN ---------- */
+  if (view === "door") {
+    const doorFiltered = doorSearch.trim().length >= 2
+      ? roster.filter((p) => `${p.name} ${p.email} ${p.phone}`.toLowerCase().includes(doorSearch.toLowerCase()))
+      : [];
+    const walkInTotal = (walkInForm.party || 1) * TICKET.price;
+    const doorCheckedIn = roster.filter((p) => p.checkedIn).length;
+
+    const handleDoorUnlock = async () => {
+      if (!passcode.trim()) return;
+      sessionStorage.setItem("doorKey", passcode);
+      setDoorUnlocked(true);
+      await loadRoster(passcode);
+    };
+
+    const addCashWalkIn = async () => {
+      if (!walkInForm.name.trim()) { setWalkInMsg("Name is required."); return; }
+      setWalkInLoading(true);
+      const row = {
+        name: walkInForm.name.trim(), phone: walkInForm.phone.trim(),
+        party: walkInForm.party || 1, source: "Walk-in",
+        status: "Paid", amount: walkInTotal, checked_in: true,
+      };
+      try { await dbInsert(row); } catch (err) { /* offline fallback */ }
+      const uiRow = { ...row, checkedIn: true, date: new Date().toISOString().slice(0, 10), id: `wi-${Date.now()}` };
+      setRoster((r) => [uiRow, ...r]);
+      setWalkIns((w) => [{ ...row, payment: "cash", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }, ...w]);
+      setWalkInForm({ name: "", phone: "", party: 1, payment: walkInForm.payment });
+      setWalkInMsg(`${row.name} added and checked in!`);
+      setWalkInLoading(false);
+      setTimeout(() => setWalkInMsg(""), 6000);
+    };
+
+    const addCardWalkIn = async () => {
+      if (!walkInForm.name.trim()) { setWalkInMsg("Name is required."); return; }
+      sessionStorage.setItem("doorKey", passcode);
+      setWalkInLoading(true);
+      try {
+        await startStripeWalkIn({
+          name: walkInForm.name.trim(), phone: walkInForm.phone.trim(),
+          party: walkInForm.party || 1, total: walkInTotal,
+          lineItems: [{ name: TICKET.name, amount: Math.round(walkInTotal * 100), quantity: 1 }],
+        });
+      } catch (err) {
+        setWalkInMsg(err.message);
+        setWalkInLoading(false);
+      }
+    };
+
+    return (
+      <div className="mrd"><Styles /><UtilBar />
+        <div className="wrap panel anim">
+          <div className="section-h">Door</div>
+          <h2 className="section-t mrd-serif">Check-In &amp; Walk-Ins</h2>
+
+          {!doorUnlocked ? (
+            <>
+              <p className="section-d">Enter the organizer passcode to unlock the roster.</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--paper)", border: "1.5px solid var(--line)", borderRadius: 14, padding: 20, maxWidth: 480 }}>
+                <Lock size={18} color="var(--pine)" />
+                <input
+                  className="inp" style={{ flex: 1, minWidth: 180 }} type="password"
+                  placeholder="Organizer passcode" value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleDoorUnlock()}
+                />
+                <button className="btn btn-p" onClick={handleDoorUnlock} disabled={dbState === "loading"}>
+                  {dbState === "loading" ? "Loading…" : "Unlock"}
+                </button>
+              </div>
+              {dbState === "offline" && <p style={{ fontSize: 13, color: "var(--warn)", marginTop: 10, display: "flex", alignItems: "center", gap: 7 }}><AlertTriangle size={14} />Wrong passcode or roster unavailable.</p>}
+            </>
+          ) : (
+            <>
+              {/* Stats */}
+              <div className="door-stats">
+                <div className="stat"><div className="n">{doorCheckedIn}</div><div className="l">Checked in</div></div>
+                <div className="stat"><div className="n">{roster.length}</div><div className="l">Registered</div></div>
+                <div className="stat"><div className="n">{walkIns.length}</div><div className="l">Walk-ins today</div></div>
+              </div>
+
+              {doorFlash && <div className="door-flash"><CheckCircle2 size={20} />{doorFlash}</div>}
+
+              {/* ---- Check In Pre-Registered ---- */}
+              <div style={{ marginBottom: 36 }}>
+                <div className="door-section-h"><Search size={16} />Check In Pre-Registered</div>
+                <div className="rtools">
+                  <div className="searchbox">
+                    <Search size={18} color="var(--inkSoft)" />
+                    <input
+                      value={doorSearch}
+                      onChange={(e) => setDoorSearch(e.target.value)}
+                      placeholder="Search name, email, or phone…"
+                      style={{ fontSize: 15 }}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                {doorSearch.trim().length === 0 && (
+                  <p style={{ fontSize: 13, color: "var(--inkSoft)", marginTop: 8 }}>Type at least 2 characters to search the roster.</p>
+                )}
+                {doorSearch.trim().length === 1 && (
+                  <p style={{ fontSize: 13, color: "var(--inkSoft)", marginTop: 8 }}>Keep typing…</p>
+                )}
+
+                {doorSearch.trim().length >= 2 && (
+                  <div style={{ background: "var(--paper)", border: "1.5px solid var(--line)", borderRadius: 14, overflow: "hidden" }}>
+                    {doorFiltered.length === 0 ? (
+                      <div style={{ padding: 28, textAlign: "center", color: "var(--inkSoft)" }}>No matches for &ldquo;{doorSearch}&rdquo;</div>
+                    ) : (
+                      doorFiltered.map((p, i) => {
+                        const idx = roster.indexOf(p);
+                        return (
+                          <div className="door-result" key={p.id || i}>
+                            <div style={{ flex: 1, minWidth: 140 }}>
+                              <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</div>
+                              <div style={{ color: "var(--inkSoft)", fontSize: 13, marginTop: 2 }}>
+                                Party of {p.party || 1}{p.phone ? ` · ${p.phone}` : p.email ? ` · ${p.email}` : ""}
+                              </div>
+                            </div>
+                            <span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span>
+                            <button
+                              className={`door-ci-btn${p.checkedIn ? " done" : ""}`}
+                              onClick={() => {
+                                if (!p.checkedIn) {
+                                  toggleCheckIn(idx);
+                                  setDoorFlash(`${p.name} — party of ${p.party || 1} checked in!`);
+                                  setTimeout(() => setDoorFlash(null), 5000);
+                                }
+                              }}
+                            >
+                              {p.checkedIn
+                                ? <><CheckCircle2 size={17} /> Checked in</>
+                                : <><Circle size={17} /> Check in</>}
+                            </button>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ---- Add Walk-In ---- */}
+              <div>
+                <div className="door-section-h"><UserPlus size={16} />Add Walk-In</div>
+                <div className="card" style={{ display: "grid", gap: 16, marginBottom: 18 }}>
+                  <div className="frow">
+                    <div className="field">
+                      <label>Name <span className="req">*</span></label>
+                      <input className="inp" value={walkInForm.name} onChange={(e) => setWalkInForm({ ...walkInForm, name: e.target.value })} placeholder="Jean Boudreaux" />
+                    </div>
+                    <div className="field">
+                      <label>Phone</label>
+                      <input className="inp" value={walkInForm.phone} onChange={(e) => setWalkInForm({ ...walkInForm, phone: e.target.value })} placeholder="(337) 555-0123" />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
+                    <div className="field">
+                      <label>Party size</label>
+                      <div className="qty" style={{ width: "fit-content" }}>
+                        <button onClick={() => setWalkInForm({ ...walkInForm, party: Math.max(1, (walkInForm.party || 1) - 1) })}><Minus size={17} /></button>
+                        <span>{walkInForm.party || 1}</span>
+                        <button onClick={() => setWalkInForm({ ...walkInForm, party: Math.min(20, (walkInForm.party || 1) + 1) })}><Plus size={17} /></button>
+                      </div>
+                    </div>
+                    <div className="field" style={{ flex: 1, minWidth: 220 }}>
+                      <label>Payment method</label>
+                      <div className="pay-toggle">
+                        <button className={walkInForm.payment === "cash" ? "on" : ""} onClick={() => setWalkInForm({ ...walkInForm, payment: "cash" })}>Cash / Check</button>
+                        <button className={walkInForm.payment === "card" ? "on" : ""} onClick={() => setWalkInForm({ ...walkInForm, payment: "card" })}><CreditCard size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Card (Stripe)</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, paddingTop: 4 }}>
+                    <div>
+                      <span style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600 }}>{money(walkInTotal)}</span>
+                      <span style={{ color: "var(--inkSoft)", fontSize: 13, marginLeft: 8 }}>{walkInForm.party || 1} × {money(TICKET.price)}</span>
+                    </div>
+                    {walkInForm.payment === "cash" ? (
+                      <button className="btn btn-p" onClick={addCashWalkIn} disabled={walkInLoading}>
+                        <UserPlus size={16} />{walkInLoading ? "Adding…" : "Add & Check In"}
+                      </button>
+                    ) : (
+                      <button className="btn btn-p" onClick={addCardWalkIn} disabled={walkInLoading || !STRIPE_CONFIG.liveMode}>
+                        <CreditCard size={16} />{walkInLoading ? "Redirecting…" : `Charge ${money(walkInTotal)} via Stripe`}
+                      </button>
+                    )}
+                  </div>
+
+                  {walkInForm.payment === "card" && !STRIPE_CONFIG.liveMode && (
+                    <div className="stripe-note"><b>Simulation mode:</b> Set <code>liveMode: true</code> and add your Stripe keys to enable live card payments for walk-ins.</div>
+                  )}
+
+                  {walkInMsg && (
+                    <div className="door-flash" style={{ margin: 0 }}><CheckCircle2 size={17} />{walkInMsg}</div>
+                  )}
+                </div>
+
+                {/* Walk-in list */}
+                {walkIns.length > 0 && (
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Walk-ins added this session ({walkIns.length})</div>
+                    <div style={{ background: "var(--paper)", border: "1.5px solid var(--line)", borderRadius: 14, overflow: "hidden", padding: "0 18px" }}>
+                      {walkIns.map((w, i) => (
+                        <div className="walkin-row" key={i}>
+                          <CheckCircle2 size={16} color="var(--ok)" />
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontWeight: 700 }}>{w.name}</span>
+                            <span style={{ color: "var(--inkSoft)", marginLeft: 8 }}>Party of {w.party}</span>
+                            {w.phone && <span style={{ color: "var(--inkSoft)", marginLeft: 8 }}>{w.phone}</span>}
+                          </div>
+                          <span className={`badge-s ${w.payment === "card" ? "b-onl" : "b-comp"}`}>{w.payment === "card" ? "Card" : "Cash"}</span>
+                          <span style={{ fontWeight: 700 }}>{money(w.amount)}</span>
+                          <span style={{ color: "var(--inkSoft)", fontSize: 12, whiteSpace: "nowrap" }}>{w.time}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   /* ---------- ORGANIZER ---------- */
   if (view === "admin") {
