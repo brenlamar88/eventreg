@@ -765,27 +765,27 @@ export default function BoilOnTheBend() {
 
           <div className="rtools"><div className="searchbox"><Search size={16} color="var(--inkSoft)" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, phone…" /></div></div>
 
-          <table className=”tbl”>
+          <table className="tbl">
             <thead><tr><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Contact</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
                 const idx = roster.indexOf(p);
                 const { first, last } = splitName(p.name);
-                const ranch = p.ranch || p.notes || “—“;
+                const ranch = p.ranch || p.notes || "—";
                 return (
                   <tr key={p.id || i}>
                     <td style={{ fontWeight: 700 }}>{first}</td>
                     <td style={{ fontWeight: 700 }}>{last}</td>
-                    <td style={{ color: “var(--inkSoft)” }}>{ranch}</td>
-                    <td style={{ color: “var(--inkSoft)” }}>{p.email}<br /><span style={{ fontSize: 12 }}>{p.phone}</span></td>
+                    <td style={{ color: "var(--inkSoft)" }}>{ranch}</td>
+                    <td style={{ color: "var(--inkSoft)" }}>{p.email}<br /><span style={{ fontSize: 12 }}>{p.phone}</span></td>
                     <td>{p.party || 1}</td>
-                    <td><span className={`badge-s ${p.status === “Paid” ? “b-paid” : “b-pend”}`}>{p.status}</span></td>
-                    <td><button className={`ci ${p.checkedIn ? “on” : “”}`} onClick={() => toggleCheckIn(idx)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? “In” : “Check in”}</button></td>
-                    <td><button className=”ci” style={{ color: “#b4471f” }} onClick={() => deleteRegistrant(idx)}><Trash2 size={16} /></button></td>
+                    <td><span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span></td>
+                    <td><button className={`ci ${p.checkedIn ? "on" : ""}`} onClick={() => toggleCheckIn(idx)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? "In" : "Check in"}</button></td>
+                    <td><button className="ci" style={{ color: "#b4471f" }} onClick={() => deleteRegistrant(idx)}><Trash2 size={16} /></button></td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: “center”, color: “var(--inkSoft)”, padding: 30 }}>No registrants match “{search}”.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
             </tbody>
           </table>
         </div>
