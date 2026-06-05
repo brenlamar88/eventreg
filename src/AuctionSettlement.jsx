@@ -100,6 +100,10 @@ const Styles = () => (
     .ci.on{color:var(--ok);}
     .mini{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none;width:90px;}
     .mini:focus{border-color:var(--pine);} .mini:disabled{background:#f0ece2;color:#aaa;cursor:not-allowed;}
+    .buyer-in{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none;width:160px;}
+    .buyer-in:focus{border-color:var(--pine);}
+    .amt-in{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none;width:90px;text-align:right;}
+    .amt-in:focus{border-color:var(--pine);}
     .trash{background:none;border:none;cursor:pointer;color:#a23b1c;}
     .grand{margin-top:18px;background:var(--pine);color:#EAF1EC;border-radius:14px;padding:18px 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
     @media(max-width:760px){.grand{grid-template-columns:repeat(2,1fr);}}
@@ -191,6 +195,9 @@ export default function AuctionSettlement() {
       if ("delivered" in patch) dbPatch.delivered = patch.delivered;
       if ("checkNo" in patch) dbPatch.check_no = patch.checkNo || null;
       if ("checkDate" in patch) dbPatch.check_date = patch.checkDate || null;
+      if ("buyerName" in patch) dbPatch.buyer_name = patch.buyerName || null;
+      if ("buyerRanch" in patch) dbPatch.buyer_ranch = patch.buyerRanch || null;
+      if ("amount" in patch) dbPatch.amount = patch.amount;
       try { await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...dbPatch }) }); } catch {}
     }
   };
@@ -276,8 +283,9 @@ export default function AuctionSettlement() {
                     <tr className="grp2"><td colSpan={11}>{g.name}</td></tr>
                     {g.ls.map((l) => { const c = calc(l, eventFee); const status = l.checkNo ? "paid" : l.delivered ? "ready" : "wait"; return (
                       <tr key={l.id}>
-                        <td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.buyer}</td>
-                        <td className="num">{money(l.amount)}</td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
+                        <td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td>
+                        <td><input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} /></td>
+                        <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
                         <td><button className={`ci ${l.delivered ? "on" : ""}`} onClick={() => setLot(l.id, { delivered: !l.delivered, ...(l.delivered ? { checkNo: "", checkDate: "" } : {}) })}>{l.delivered ? <CheckCircle2 size={16} /> : <Circle size={16} />}<span className={`badge ${status === "paid" ? "b-paid" : status === "ready" ? "b-ready" : "b-wait"}`}>{status === "paid" ? "Paid" : status === "ready" ? "Ready" : "Awaiting"}</span></button></td>
                         <td><input className="mini" value={l.checkNo} disabled={!l.delivered} placeholder="—" onChange={(e) => setLot(l.id, { checkNo: e.target.value })} /></td>
                         <td><input className="mini" type="date" value={l.checkDate} disabled={!l.delivered} onChange={(e) => setLot(l.id, { checkDate: e.target.value })} /></td>
