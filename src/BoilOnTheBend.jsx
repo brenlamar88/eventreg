@@ -54,7 +54,7 @@ const dbRowToUI = (r) => ({
   id: r.id, name: r.name, email: r.email, phone: r.phone, party: r.party,
   source: r.source, status: r.status, amount: Number(r.amount) || 0,
   checkedIn: r.checked_in, date: (r.created_at || "").slice(0, 10),
-  notes: r.notes || null,
+  notes: r.notes || null, ranch: r.ranch || null,
 });
 
 /* ============================================================================
@@ -583,6 +583,7 @@ export default function BoilOnTheBend() {
                           <div className="door-result" key={p.id || i}>
                             <div style={{ flex: 1, minWidth: 140 }}>
                               <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</div>
+                              {p.ranch && <div style={{ fontSize: 13, color: "var(--pine)", fontWeight: 600, marginTop: 1 }}>{p.ranch}</div>}
                               <div style={{ color: "var(--inkSoft)", fontSize: 13, marginTop: 2 }}>
                                 Party of {p.party || 1}{p.phone ? ` · ${p.phone}` : p.email ? ` · ${p.email}` : ""}
                               </div>
