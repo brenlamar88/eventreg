@@ -329,7 +329,7 @@ export default function BoilOnTheBend() {
   const [doorUnlocked, setDoorUnlocked] = useState(false);
   const [doorSearch, setDoorSearch] = useState("");
   const [doorFlash, setDoorFlash] = useState(null);
-  const [walkInForm, setWalkInForm] = useState({ name: "", phone: "", party: 1, payment: "cash" });
+  const [walkInForm, setWalkInForm] = useState({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: "cash" });
   const [walkInMsg, setWalkInMsg] = useState("");
   const [walkInLoading, setWalkInLoading] = useState(false);
   const [walkIns, setWalkIns] = useState([]);
@@ -495,10 +495,12 @@ export default function BoilOnTheBend() {
     };
 
     const addCashWalkIn = async () => {
-      if (!walkInForm.name.trim()) { setWalkInMsg("Name is required."); return; }
+      if (!walkInForm.firstName.trim()) { setWalkInMsg("First name is required."); return; }
       setWalkInLoading(true);
+      const fullName = `${walkInForm.firstName.trim()} ${walkInForm.lastName.trim()}`.trim();
       const row = {
-        name: walkInForm.name.trim(), phone: walkInForm.phone.trim(),
+        name: fullName, phone: walkInForm.phone.trim(), ranch: walkInForm.ranch.trim() || null,
+        notes: walkInForm.ranch.trim() || null,
         party: walkInForm.party || 1, source: "Walk-in",
         status: "Paid", amount: walkInTotal, checked_in: true,
       };
@@ -506,19 +508,20 @@ export default function BoilOnTheBend() {
       const uiRow = { ...row, checkedIn: true, date: new Date().toISOString().slice(0, 10), id: `wi-${Date.now()}` };
       setRoster((r) => [uiRow, ...r]);
       setWalkIns((w) => [{ ...row, payment: "cash", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }, ...w]);
-      setWalkInForm({ name: "", phone: "", party: 1, payment: walkInForm.payment });
-      setWalkInMsg(`${row.name} added and checked in!`);
+      setWalkInForm({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: walkInForm.payment });
+      setWalkInMsg(`${fullName} added and checked in!`);
       setWalkInLoading(false);
       setTimeout(() => setWalkInMsg(""), 6000);
     };
 
     const addCardWalkIn = async () => {
-      if (!walkInForm.name.trim()) { setWalkInMsg("Name is required."); return; }
+      if (!walkInForm.firstName.trim()) { setWalkInMsg("First name is required."); return; }
       sessionStorage.setItem("doorKey", passcode);
       setWalkInLoading(true);
+      const fullName = `${walkInForm.firstName.trim()} ${walkInForm.lastName.trim()}`.trim();
       try {
         await startStripeWalkIn({
-          name: walkInForm.name.trim(), phone: walkInForm.phone.trim(),
+          name: fullName, phone: walkInForm.phone.trim(),
           party: walkInForm.party || 1, total: walkInTotal,
           lineItems: [{ name: TICKET.name, amount: Math.round(walkInTotal * 100), quantity: 1 }],
         });
@@ -631,8 +634,18 @@ export default function BoilOnTheBend() {
                 <div className="card" style={{ display: "grid", gap: 16, marginBottom: 18 }}>
                   <div className="frow">
                     <div className="field">
-                      <label>Name <span className="req">*</span></label>
-                      <input className="inp" value={walkInForm.name} onChange={(e) => setWalkInForm({ ...walkInForm, name: e.target.value })} placeholder="Jean Boudreaux" />
+                      <label>First name <span className="req">*</span></label>
+                      <input className="inp" value={walkInForm.firstName} onChange={(e) => setWalkInForm({ ...walkInForm, firstName: e.target.value })} placeholder="Jean" />
+                    </div>
+                    <div className="field">
+                      <label>Last name</label>
+                      <input className="inp" value={walkInForm.lastName} onChange={(e) => setWalkInForm({ ...walkInForm, lastName: e.target.value })} placeholder="Boudreaux" />
+                    </div>
+                  </div>
+                  <div className="frow">
+                    <div className="field">
+                      <label>Ranch / Business name</label>
+                      <input className="inp" value={walkInForm.ranch} onChange={(e) => setWalkInForm({ ...walkInForm, ranch: e.target.value })} placeholder="Bayou Ranch" />
                     </div>
                     <div className="field">
                       <label>Phone</label>
@@ -652,7 +665,7 @@ export default function BoilOnTheBend() {
                     <div className="field" style={{ flex: 1, minWidth: 220 }}>
                       <label>Payment method</label>
                       <div className="pay-toggle">
-                        <button className={walkInForm.payment === "cash" ? "on" : ""} onClick={() => setWalkInForm({ ...walkInForm, payment: "cash" })}>Cash / Check</button>
+                        <button className={walkInForm.payment === "cash" ? "on" : ""} onClick={() => setWalkInForm({ ...walkInForm, payment: "cash" })}>Cash / Check / Square</button>
                         <button className={walkInForm.payment === "card" ? "on" : ""} onClick={() => setWalkInForm({ ...walkInForm, payment: "card" })}><CreditCard size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />Card (Stripe)</button>
                       </div>
                     </div>
