@@ -3,7 +3,7 @@ import {
   Calendar, MapPin, Check, ChevronRight, ChevronLeft, Users, Plus, Minus,
   ShieldCheck, Lock, Trash2, UserPlus, Search, CheckCircle2, Circle,
   Upload, Heart, LayoutGrid, Ticket, Database, RefreshCw, AlertTriangle,
-  ScanLine, CreditCard,
+  ScanLine, CreditCard, FileText,
 } from "lucide-react";
 
 /* ============================================================================
@@ -462,6 +462,7 @@ export default function BoilOnTheBend() {
         <button className={view === "register" ? "on" : ""} onClick={() => setView("register")}><Ticket size={15} /> Register</button>
         <button className={view === "door" ? "on" : ""} onClick={() => setView("door")}><ScanLine size={15} /> Door</button>
         <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}><LayoutGrid size={15} /> Organizer</button>
+        <button onClick={() => window.location.href = "/?app=settlement"} style={{ borderLeft: "1px solid #23604A", marginLeft: 4, paddingLeft: 12 }}><FileText size={15} /> Ledger</button>
       </div>
     </div></div>
   );
