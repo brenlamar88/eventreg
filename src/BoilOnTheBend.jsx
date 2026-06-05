@@ -583,7 +583,7 @@ export default function BoilOnTheBend() {
                           <div className="door-result" key={p.id || i}>
                             <div style={{ flex: 1, minWidth: 140 }}>
                               <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</div>
-                              {p.ranch && <div style={{ fontSize: 13, color: "var(--pine)", fontWeight: 600, marginTop: 1 }}>{p.ranch}</div>}
+                              {(p.ranch || p.notes) && <div style={{ fontSize: 13, color: "var(--pine)", fontWeight: 600, marginTop: 1 }}>{p.ranch || p.notes}</div>}
                               <div style={{ color: "var(--inkSoft)", fontSize: 13, marginTop: 2 }}>
                                 Party of {p.party || 1}{p.phone ? ` · ${p.phone}` : p.email ? ` · ${p.email}` : ""}
                               </div>
