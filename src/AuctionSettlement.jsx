@@ -255,6 +255,7 @@ export default function AuctionSettlement() {
         <div className="sub">Consignor payouts, ledgers, and delivery tracking</div>
         <div className="tabs">
           <TabBtn id="payments" icon={DollarSign}>Consignor Payment Detail</TabBtn>
+          <TabBtn id="grand" icon={Receipt}>Grand Auction</TabBtn>
           <TabBtn id="consignor" icon={FileText}>Consignor Ledger</TabBtn>
           <TabBtn id="buyer" icon={Receipt}>Buyer Ledger</TabBtn>
         </div>
@@ -376,6 +377,41 @@ export default function AuctionSettlement() {
               </div>
             </div>
           </>);
+        })()}
+
+        {tab === "grand" && (() => {
+          const grandLots = lots.filter((l) => l.category === "Grand Auction").sort((a, b) => Number(a.lotNo) - Number(b.lotNo));
+          const totSold = grandLots.reduce((a, l) => a + l.amount, 0);
+          const withBuyer = grandLots.filter((l) => l.buyerName).length;
+          return grandLots.length === 0
+            ? <div className="empty"><div className="big">No Grand Auction lots</div>Add lots with category "Grand Auction" on the Payment Detail tab.</div>
+            : (<>
+              <div className="bar" style={{justifyContent:"space-between"}}>
+                <span style={{fontSize:13,fontWeight:600,color:"var(--inkSoft)"}}>{withBuyer} of {grandLots.length} lots have a buyer · {money(totSold)} total</span>
+                <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>
+              </div>
+              <table className="tbl">
+                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th></tr></thead>
+                <tbody>
+                  {grandLots.map((l) => { const c = calc(l, eventFee); return (
+                    <tr key={l.id} style={!l.buyerName ? {background:"#fff8f3"} : {}}>
+                      <td className="lot">{l.lotNo}</td>
+                      <td>{l.description || "—"}</td>
+                      <td style={{color:"var(--inkSoft)",fontSize:12.5}}>{l.consignorName || "—"}</td>
+                      <td><input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Enter buyer…" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} /></td>
+                      <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td>
+                      <td className="num">{money(c.fee)}</td>
+                      <td className="num">{money(c.commission)}</td>
+                      <td className="num net">{money(c.net)}</td>
+                    </tr>); })}
+                </tbody>
+              </table>
+              <div className="grand" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
+                <div><div className="l">Grand Auction total</div><div className="n">{money(totSold)}</div></div>
+                <div><div className="l">Lots with buyer</div><div className="n">{withBuyer} / {grandLots.length}</div></div>
+                <div><div className="l">Net to consignors</div><div className="n">{money(grandLots.reduce((a, l) => a + calc(l, eventFee).net, 0))}</div></div>
+              </div>
+            </>);
         })()}
 
         {tab === "buyer" && (() => {
