@@ -1,8 +1,9 @@
 // api/registrants.js
 // ---------------------------------------------------------------------------
 // Organizer-only endpoint for the Boil on the Bend roster.
-// GET   → list all registrants (newest first)
-// PATCH → toggle a check-in   (body: { id, checked_in })
+// GET    → list all registrants (newest first); coalesces ranch from notes
+// PATCH  → toggle a check-in   (body: { id, checked_in })
+// DELETE → remove a registrant (body: { id })
 //
 // Uses the Supabase SERVICE ROLE key, which bypasses RLS, so it must live
 // ONLY on the server. Access is gated by a shared organizer passcode that the
@@ -32,7 +33,9 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       const r = await fetch(`${base}?event_id=eq.${EVENT_ID}&order=created_at.desc`, { headers });
       const data = await r.json();
-      return res.status(r.ok ? 200 : 500).json(data);
+      // Coalesce ranch from notes for records imported before the ranch column existed
+      const rows = Array.isArray(data) ? data.map((row) => ({ ...row, ranch: row.ranch || row.notes || null })) : data;
+      return res.status(r.ok ? 200 : 500).json(rows);
     }
 
     if (req.method === "PATCH") {
@@ -46,7 +49,17 @@ export default async function handler(req, res) {
       return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
     }
 
-    res.setHeader("Allow", "GET, PATCH");
+    if (req.method === "DELETE") {
+      const { id } = req.body || {};
+      if (!id) return res.status(400).json({ error: "Missing id" });
+      const r = await fetch(`${base}?id=eq.${id}`, {
+        method: "DELETE",
+        headers: { ...headers, Prefer: "return=minimal" },
+      });
+      return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
+    }
+
+    res.setHeader("Allow", "GET, PATCH, DELETE");
     return res.status(405).json({ error: "Method not allowed" });
   } catch (err) {
     console.error("registrants error:", err);
