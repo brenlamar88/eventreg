@@ -96,7 +96,7 @@ const SAMPLE_ROSTER = [
 ];
 
 const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const blankAtt = () => ({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
+const blankAtt = () => ({ firstName: "", lastName: "", email: "", phone: "", ranch: "", notes: "" });
 
 /* ---- Jotform CSV/JSON parsing ---- */
 function splitCSVLine(line) {
@@ -387,7 +387,7 @@ export default function BoilOnTheBend() {
     const a = attendees[0];
     const row = {
       name: `${a.firstName} ${a.lastName}`.trim(), email: a.email, phone: a.phone,
-      party: qty, source: "Online", status: "Paid", amount: total, notes: a.notes || null,
+      party: qty, source: "Online", status: "Paid", amount: total, notes: a.notes || null, ranch: a.ranch || null,
     };
     try { await dbInsert(row); } catch (err) { console.warn("DB write skipped:", err.message); }
     setRoster((r) => [{ ...row, checkedIn: false, date: new Date().toISOString().slice(0, 10) }, ...r]);
@@ -851,6 +851,9 @@ export default function BoilOnTheBend() {
                       <div className="field"><label>Email <span className="req">*</span></label><input className={`inp ${errors["0-email"] ? "err" : ""}`} value={a.email} onChange={(e) => updateAtt(0, "email", e.target.value)} placeholder="jean@example.com" />{errors["0-email"] && <span className="errtxt">Enter a valid email.</span>}</div>
                       <div className="field"><label>Phone</label><input className="inp" value={a.phone} onChange={(e) => updateAtt(0, "phone", e.target.value)} placeholder="(337) 555-0123" /></div>
                     </div>
+                  )}
+                  {i === 0 && (
+                    <div className="field"><label>Ranch / Company</label><input className="inp" value={a.ranch} onChange={(e) => updateAtt(0, "ranch", e.target.value)} placeholder="Bayou Ranch" /></div>
                   )}
                   <div className="field"><label>Notes / dietary</label><input className="inp" value={a.notes} onChange={(e) => updateAtt(i, "notes", e.target.value)} placeholder="Allergies, seating requests…" /></div>
                 </div>
