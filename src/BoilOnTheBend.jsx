@@ -97,6 +97,7 @@ const SAMPLE_ROSTER = [
 
 const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const blankAtt = () => ({ firstName: "", lastName: "", email: "", phone: "", ranch: "", notes: "" });
+const splitName = (name) => { const parts = (name || "").trim().split(/\s+/); return { first: parts[0] || "", last: parts.slice(1).join(" ") || "" }; };
 
 /* ---- Jotform CSV/JSON parsing ---- */
 function splitCSVLine(line) {
@@ -450,6 +451,17 @@ export default function BoilOnTheBend() {
     }
   };
 
+  const deleteRegistrant = async (idx) => {
+    const target = roster[idx];
+    if (!window.confirm(`Delete ${target.name}? This cannot be undone.`)) return;
+    setRoster((r) => r.filter((_, i) => i !== idx));
+    if (target.id && passcode) {
+      try {
+        await fetch(ROSTER_ENDPOINT, { method: "DELETE", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id }) });
+      } catch (err) { /* keep optimistic local state */ }
+    }
+  };
+
   const filtered = roster.filter((p) => `${p.name} ${p.email} ${p.phone}`.toLowerCase().includes(search.toLowerCase()));
   const totalGuests = roster.reduce((s, p) => s + (p.party || 1), 0);
   const checkedIn = roster.filter((p) => p.checkedIn).length;
@@ -580,10 +592,11 @@ export default function BoilOnTheBend() {
                     ) : (
                       doorFiltered.map((p, i) => {
                         const idx = roster.indexOf(p);
+                        const { first, last } = splitName(p.name);
                         return (
                           <div className="door-result" key={p.id || i}>
                             <div style={{ flex: 1, minWidth: 140 }}>
-                              <div style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</div>
+                              <div style={{ fontWeight: 700, fontSize: 16 }}>{first} <span style={{ fontWeight: 400 }}>{last}</span></div>
                               {(p.ranch || p.notes) && <div style={{ fontSize: 13, color: "var(--pine)", fontWeight: 600, marginTop: 1 }}>{p.ranch || p.notes}</div>}
                               <div style={{ color: "var(--inkSoft)", fontSize: 13, marginTop: 2 }}>
                                 Party of {p.party || 1}{p.phone ? ` · ${p.phone}` : p.email ? ` · ${p.email}` : ""}
@@ -739,23 +752,27 @@ export default function BoilOnTheBend() {
 
           <div className="rtools"><div className="searchbox"><Search size={16} color="var(--inkSoft)" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, phone…" /></div></div>
 
-          <table className="tbl">
-            <thead><tr><th>Name</th><th>Contact</th><th>Party</th><th>Source</th><th>Status</th><th>Check-in</th></tr></thead>
+          <table className=”tbl”>
+            <thead><tr><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Contact</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
                 const idx = roster.indexOf(p);
+                const { first, last } = splitName(p.name);
+                const ranch = p.ranch || p.notes || “—“;
                 return (
                   <tr key={p.id || i}>
-                    <td style={{ fontWeight: 700 }}>{p.name}{p.notes && <div style={{ fontSize: 11.5, color: "var(--inkSoft)", fontWeight: 400, marginTop: 2 }}>{p.notes}</div>}</td>
-                    <td style={{ color: "var(--inkSoft)" }}>{p.email}<br /><span style={{ fontSize: 12 }}>{p.phone}</span></td>
+                    <td style={{ fontWeight: 700 }}>{first}</td>
+                    <td style={{ fontWeight: 700 }}>{last}</td>
+                    <td style={{ color: “var(--inkSoft)” }}>{ranch}</td>
+                    <td style={{ color: “var(--inkSoft)” }}>{p.email}<br /><span style={{ fontSize: 12 }}>{p.phone}</span></td>
                     <td>{p.party || 1}</td>
-                    <td><span className={`badge-s ${p.source === "Jotform" ? "b-jot" : p.source === "Comp" ? "b-comp" : "b-onl"}`}>{p.source}</span></td>
-                    <td><span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span></td>
-                    <td><button className={`ci ${p.checkedIn ? "on" : ""}`} onClick={() => toggleCheckIn(idx)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? "In" : "Check in"}</button></td>
+                    <td><span className={`badge-s ${p.status === “Paid” ? “b-paid” : “b-pend”}`}>{p.status}</span></td>
+                    <td><button className={`ci ${p.checkedIn ? “on” : “”}`} onClick={() => toggleCheckIn(idx)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? “In” : “Check in”}</button></td>
+                    <td><button className=”ci” style={{ color: “#b4471f” }} onClick={() => deleteRegistrant(idx)}><Trash2 size={16} /></button></td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match “{search}”.</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: “center”, color: “var(--inkSoft)”, padding: 30 }}>No registrants match “{search}”.</td></tr>}
             </tbody>
           </table>
         </div>
