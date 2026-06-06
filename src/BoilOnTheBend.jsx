@@ -363,6 +363,18 @@ export default function BoilOnTheBend() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-refresh roster every 20 s when connected so all devices stay in sync
+  useEffect(() => {
+    if (dbState !== "live") return;
+    const id = setInterval(() => {
+      fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } })
+        .then((r) => r.ok ? r.json() : null)
+        .then((rows) => { if (rows) setRoster(rows.map(dbRowToUI)); })
+        .catch(() => {});
+    }, 20000);
+    return () => clearInterval(id);
+  }, [dbState, passcode]);
+
   const setQty = (n) => { n = Math.max(1, Math.min(20, n)); setAttendees((prev) => { const a = [...prev]; while (a.length < n) a.push(blankAtt()); while (a.length > n) a.pop(); return a; }); };
   const updateAtt = (i, f, v) => setAttendees((p) => p.map((a, idx) => idx === i ? { ...a, [f]: v } : a));
   const removeAtt = (i) => setAttendees((p) => p.filter((_, idx) => idx !== i));
@@ -386,7 +398,7 @@ export default function BoilOnTheBend() {
 
   const completeRegistration = async () => {
     const a = attendees[0];
-    const bidderNo = String(nextBidderNumber());
+    const bidderNo = String(await nextBidderNumber());
     const row = {
       name: `${a.firstName} ${a.lastName}`.trim(), email: a.email, phone: a.phone,
       party: qty, source: "Online", status: "Paid", amount: total, notes: a.notes || null, ranch: a.ranch || null,
@@ -484,7 +496,18 @@ export default function BoilOnTheBend() {
     }
   };
 
-  const nextBidderNumber = () => {
+  const nextBidderNumber = async () => {
+    // Always fetch fresh roster from DB to avoid duplicates across devices
+    try {
+      const r = await fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } });
+      if (r.ok) {
+        const rows = await r.json();
+        setRoster(rows.map(dbRowToUI)); // also refresh local state
+        const nums = rows.map((p) => parseInt(p.bidder_number || "0", 10)).filter((n) => !isNaN(n) && n > 0);
+        return nums.length ? Math.max(...nums) + 1 : 1;
+      }
+    } catch {}
+    // Fallback to local state if offline
     const nums = roster.map((p) => parseInt(p.bidderNumber || "0", 10)).filter((n) => !isNaN(n) && n > 0);
     return nums.length ? Math.max(...nums) + 1 : 1;
   };
@@ -525,7 +548,7 @@ export default function BoilOnTheBend() {
       if (!walkInForm.firstName.trim()) { setWalkInMsg("First name is required."); return; }
       setWalkInLoading(true);
       const fullName = `${walkInForm.firstName.trim()} ${walkInForm.lastName.trim()}`.trim();
-      const bidderNo = String(nextBidderNumber());
+      const bidderNo = String(await nextBidderNumber());
       const row = {
         name: fullName, phone: walkInForm.phone.trim(), ranch: walkInForm.ranch.trim() || null,
         notes: walkInForm.ranch.trim() || null,
