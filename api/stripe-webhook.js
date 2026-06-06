@@ -42,6 +42,28 @@ export default async function handler(req, res) {
 
   if (event.type === "checkout.session.completed") {
     const s = event.data.object;
+
+    // Lot payment — mark buyer_paid on the lot
+    if (s.metadata?.type === "lot" && s.metadata?.lotId) {
+      try {
+        await fetch(`${process.env.SUPABASE_URL}/rest/v1/lots?id=eq.${s.metadata.lotId}`, {
+          method: "PATCH",
+          headers: {
+            apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal",
+          },
+          body: JSON.stringify({ buyer_paid: true }),
+        });
+      } catch (err) {
+        console.error("Supabase lot patch (webhook) failed:", err);
+        return res.status(500).json({ received: true, stored: false });
+      }
+      return res.status(200).json({ received: true });
+    }
+
+    // Registration payment — insert new registrant
     const row = {
       event_id: s.metadata?.eventId || "boil85",
       name: s.metadata?.name || s.customer_details?.name || null,
