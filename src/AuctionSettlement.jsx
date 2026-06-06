@@ -35,6 +35,7 @@ const dbLotToUI = (r) => ({
   buyer: r.buyer_name ? display(r.buyer_name, r.buyer_ranch || "") : "—",
   amount: Number(r.amount) || 0, donated: !!r.donated,
   delivered: !!r.delivered, checkNo: r.check_no || "", checkDate: r.check_date || "",
+  buyerPaid: !!r.buyer_paid,
 });
 
 const Styles = () => (
@@ -151,6 +152,7 @@ export default function AuctionSettlement() {
   const hdr = () => ({ "Content-Type": "application/json", "x-organizer-key": passcode });
   const setF = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const findRanch = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).ranch || "";
+  const findBidder = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).bidderNo || "";
   const onNameChange = (which, v) => setForm((p) => ({ ...p, [which + "Name"]: v, [which + "Ranch"]: findRanch(v) || p[which + "Ranch"] }));
   const rememberPerson = (name, ranch) => { if (name) setPeople((prev) => prev.some((p) => p.name.toLowerCase() === name.toLowerCase()) ? prev : [...prev, { name, ranch: ranch || "" }]); };
 
@@ -179,7 +181,7 @@ export default function AuctionSettlement() {
       if (!lr.ok) throw new Error(lr.status === 401 ? "Wrong passcode." : `Lots ${lr.status}`);
       const { lots: dbLots, lotFee } = await lr.json();
       setLots(dbLots.map(dbLotToUI)); setEventFee(lotFee);
-      try { const rr = await fetch("/api/registrants", { headers: hdr() }); if (rr.ok) { const rows = await rr.json(); const seen = new Set(); const ppl = []; rows.forEach((x) => { const k = (x.name || "").toLowerCase(); if (x.name && !seen.has(k)) { seen.add(k); ppl.push({ name: x.name, ranch: x.ranch || "" }); } }); setPeople(ppl); } } catch {}
+      try { const rr = await fetch("/api/registrants", { headers: hdr() }); if (rr.ok) { const rows = await rr.json(); const seen = new Set(); const ppl = []; rows.forEach((x) => { const k = (x.name || "").toLowerCase(); if (x.name && !seen.has(k)) { seen.add(k); ppl.push({ name: x.name, ranch: x.ranch || "", bidderNo: x.bidder_number || "" }); } }); setPeople(ppl); } } catch {}
       setDb("live"); setMsg(`Connected — ${dbLots.length} lot${dbLots.length === 1 ? "" : "s"} loaded.`);
     } catch (e) {
       setDb("offline"); setMsg(`Live DB unavailable (${e.message}) — working locally. Wired up once deployed.`);
@@ -225,6 +227,7 @@ export default function AuctionSettlement() {
       if ("buyerName" in patch) dbPatch.buyer_name = patch.buyerName || null;
       if ("buyerRanch" in patch) dbPatch.buyer_ranch = patch.buyerRanch || null;
       if ("amount" in patch) dbPatch.amount = patch.amount;
+      if ("buyerPaid" in patch) dbPatch.buyer_paid = patch.buyerPaid;
       try { await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...dbPatch }) }); } catch {}
     }
   };
@@ -304,17 +307,21 @@ export default function AuctionSettlement() {
             <div className="empty"><div className="big">No lots yet</div>Set your event lot fee, Connect to load registered people, then add lots as the auction settles.</div>
           ) : (<>
             <table className="tbl">
-              <thead><tr><th>Lot</th><th>Description</th><th>Buyer</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th>Delivery</th><th>Check #</th><th>Date</th><th></th></tr></thead>
+              <thead><tr><th>Lot</th><th>Description</th><th>Buyer</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th>Buyer Paid</th><th>Delivery</th><th>Check #</th><th>Date</th><th></th></tr></thead>
               <tbody>
                 {byConsignor.map((g) => (
                   <React.Fragment key={g.name}>
-                    <tr className="grp2"><td colSpan={11}>{g.name}</td></tr>
-                    {g.ls.map((l) => { const c = calc(l, eventFee); const status = l.checkNo ? "paid" : l.delivered ? "ready" : "wait"; return (
+                    <tr className="grp2"><td colSpan={12}>{g.name}</td></tr>
+                    {g.ls.map((l) => { const c = calc(l, eventFee); const status = l.checkNo ? "paid" : l.delivered ? "ready" : "wait"; const bidderNo = findBidder(l.buyerName); return (
                       <React.Fragment key={l.id}>
                       <tr>
                         <td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td>
-                        <td><input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} /></td>
+                        <td>
+                          <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} />
+                          {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
+                        </td>
                         <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
+                        <td><button className={`ci ${l.buyerPaid ? "on" : ""}`} onClick={() => setLot(l.id, { buyerPaid: !l.buyerPaid })}>{l.buyerPaid ? <CheckCircle2 size={16}/> : <Circle size={16}/>}<span className={`badge ${l.buyerPaid ? "b-paid" : "b-wait"}`}>{l.buyerPaid ? "Paid" : "Unpaid"}</span></button></td>
                         <td><button className={`ci ${l.delivered ? "on" : ""}`} onClick={() => setLot(l.id, { delivered: !l.delivered, ...(l.delivered ? { checkNo: "", checkDate: "" } : {}) })}>{l.delivered ? <CheckCircle2 size={16} /> : <Circle size={16} />}<span className={`badge ${status === "paid" ? "b-paid" : status === "ready" ? "b-ready" : "b-wait"}`}>{status === "paid" ? "Paid" : status === "ready" ? "Ready" : "Awaiting"}</span></button></td>
                         <td><input className="mini" value={l.checkNo} disabled={!l.delivered} placeholder="—" onChange={(e) => setLot(l.id, { checkNo: e.target.value })} /></td>
                         <td><input className="mini" type="date" value={l.checkDate} disabled={!l.delivered} onChange={(e) => setLot(l.id, { checkDate: e.target.value })} /></td>
@@ -325,7 +332,7 @@ export default function AuctionSettlement() {
                       </tr>
                       {editId === l.id && (
                         <tr className="edit-row">
-                          <td colSpan={11}>
+                          <td colSpan={12}>
                             <div className="edit-grid">
                               <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
                               <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
@@ -342,7 +349,7 @@ export default function AuctionSettlement() {
                         </tr>
                       )}
                       </React.Fragment>); })}
-                    <tr className="sub"><td colSpan={3}>Subtotal — {g.name}</td><td className="num">{money(g.t.lotTotal)}</td><td className="num">{money(g.t.fees)}</td><td className="num">{money(g.t.commission)}</td><td className="num">{money(g.t.net)}</td><td colSpan={4}></td></tr>
+                    <tr className="sub"><td colSpan={3}>Subtotal — {g.name}</td><td className="num">{money(g.t.lotTotal)}</td><td className="num">{money(g.t.fees)}</td><td className="num">{money(g.t.commission)}</td><td className="num">{money(g.t.net)}</td><td colSpan={5}></td></tr>
                   </React.Fragment>
                 ))}
               </tbody>
@@ -367,8 +374,8 @@ export default function AuctionSettlement() {
             <div className="bar"><select className="sel" value={sel} onChange={(e) => setConsignorSel(e.target.value)}>{consignors.map((c) => <option key={c}>{c}</option>)}</select><button className="btn ghost" onClick={() => window.print()}><Printer size={15} /> Print / PDF</button></div>
             <div className="ledger">
               <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">Consignor Ledger · 2026 AMM</div></div><div style={{ textAlign: "right" }}><div className="whosub">Net due once delivered</div><div className="who serif" style={{ color: "var(--pine)" }}>{money(t.net)}</div></div></div>
-              {donated.length > 0 && (<><div className="secLabel">Lots Donated (100% to EWA)</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th className="num">Lot total</th></tr></thead><tbody>{donated.map((l) => <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td>{l.buyer}</td><td className="num">{money(l.amount)}</td></tr>)}<tr className="sub"><td colSpan={3}>Donated total</td><td className="num">{money(donatedTotal)}</td></tr></tbody></table></>)}
-              {sold.length > 0 && (<><div className="secLabel">Lots Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Comm.</th><th className="num">Net</th></tr></thead><tbody>{sold.map((l) => { const c = calc(l, eventFee); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.buyer}</td><td className="num">{money(l.amount)}</td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td></tr>; })}</tbody></table></>)}
+              {donated.length > 0 && (<><div className="secLabel">Lots Donated (100% to EWA)</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th></tr></thead><tbody>{donated.map((l) => { const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td>{l.buyer}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td></tr>; })}<tr className="sub"><td colSpan={4}>Donated total</td><td className="num">{money(donatedTotal)}</td></tr></tbody></table></>)}
+              {sold.length > 0 && (<><div className="secLabel">Lots Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Comm.</th><th className="num">Net</th></tr></thead><tbody>{sold.map((l) => { const c = calc(l, eventFee); const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.buyer}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td></tr>; })}</tbody></table></>)}
               <div style={{ maxWidth: 360, marginLeft: "auto", marginTop: 18 }}>
                 <div className="totline"><span>Gross lot total</span><span>{money(t.gross)}</span></div>
                 <div className="totline"><span>Lot fees</span><span>{money(t.fees)}</span></div>
@@ -391,18 +398,22 @@ export default function AuctionSettlement() {
                 <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>
               </div>
               <table className="tbl">
-                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th></tr></thead>
+                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th>Buyer Paid</th></tr></thead>
                 <tbody>
-                  {grandLots.map((l) => { const c = calc(l, eventFee); return (
+                  {grandLots.map((l) => { const c = calc(l, eventFee); const bidderNo = findBidder(l.buyerName); return (
                     <tr key={l.id} style={!l.buyerName ? {background:"#fff8f3"} : {}}>
                       <td className="lot">{l.lotNo}</td>
                       <td>{l.description || "—"}</td>
                       <td style={{color:"var(--inkSoft)",fontSize:12.5}}>{l.consignorName || "—"}</td>
-                      <td><input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Enter buyer…" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} /></td>
+                      <td>
+                        <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Enter buyer…" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} />
+                        {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
+                      </td>
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td>
                       <td className="num">{money(c.fee)}</td>
                       <td className="num">{money(c.commission)}</td>
                       <td className="num net">{money(c.net)}</td>
+                      <td><button className={`ci ${l.buyerPaid ? "on" : ""}`} onClick={() => setLot(l.id, { buyerPaid: !l.buyerPaid })}>{l.buyerPaid ? <CheckCircle2 size={16}/> : <Circle size={16}/>}<span className={`badge ${l.buyerPaid ? "b-paid" : "b-wait"}`}>{l.buyerPaid ? "Paid" : "Unpaid"}</span></button></td>
                     </tr>); })}
                 </tbody>
               </table>
@@ -420,10 +431,11 @@ export default function AuctionSettlement() {
           const ls = lots.filter((l) => l.buyer === sel);
           const byCat = {}; ls.forEach((l) => { (byCat[l.category] ||= []).push(l); });
           const lotTotal = ls.reduce((a, l) => a + l.amount, 0);
+          const selBidder = findBidder(ls[0]?.buyerName || "");
           return (<>
             <div className="bar"><select className="sel" value={sel} onChange={(e) => setBuyerSel(e.target.value)}>{buyers.map((b) => <option key={b}>{b}</option>)}</select><button className="btn ghost" onClick={() => window.print()}><Printer size={15} /> Print / PDF</button></div>
             <div className="ledger">
-              <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">Buyer Ledger · 2026 AMM</div></div><div style={{ textAlign: "right" }}><div className="whosub">Balance due</div><div className="who serif" style={{ color: "var(--pine)" }}>{money(lotTotal)}</div></div></div>
+              <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">Buyer Ledger · 2026 AMM{selBidder ? ` · Bidder #${selBidder}` : ""}</div></div><div style={{ textAlign: "right" }}><div className="whosub">Balance due</div><div className="who serif" style={{ color: "var(--pine)" }}>{money(lotTotal)}</div></div></div>
               {Object.entries(byCat).map(([cat, items]) => { const sub = items.reduce((a, l) => a + l.amount, 0); return (<div key={cat}><div className="secLabel">{cat}</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th className="num">Amount</th></tr></thead><tbody>{items.map((l) => <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.consignor}</td><td className="num">{money(l.amount)}</td></tr>)}<tr className="sub"><td colSpan={3}>{cat} subtotal</td><td className="num">{money(sub)}</td></tr></tbody></table></div>); })}
               <div style={{ maxWidth: 360, marginLeft: "auto", marginTop: 18 }}><div className="totline big"><span>Lot total</span><span>{money(lotTotal)}</span></div></div>
             </div>

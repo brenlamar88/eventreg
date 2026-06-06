@@ -39,12 +39,15 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "PATCH") {
-      const { id, checked_in } = req.body || {};
+      const { id, checked_in, bidder_number, ...rest } = req.body || {};
       if (!id) return res.status(400).json({ error: "Missing id" });
+      const patch = {};
+      if ("checked_in" in (req.body || {})) patch.checked_in = !!checked_in;
+      if ("bidder_number" in (req.body || {})) patch.bidder_number = bidder_number ?? null;
       const r = await fetch(`${base}?id=eq.${id}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=minimal" },
-        body: JSON.stringify({ checked_in: !!checked_in }),
+        body: JSON.stringify(patch),
       });
       return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
     }
