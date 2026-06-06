@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
-  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X,
+  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard,
 } from "lucide-react";
 
 /* ============================================================================
@@ -108,6 +108,9 @@ const Styles = () => (
     .trash{background:none;border:none;cursor:pointer;color:#a23b1c;}
     .edit-btn{background:none;border:none;cursor:pointer;color:var(--inkSoft);padding:2px;}
     .edit-btn:hover{color:var(--pine);}
+    .pay-btn{font-family:inherit;font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;border:1.5px solid var(--pine);background:var(--pine);color:#fff;}
+    .pay-btn:hover{background:var(--pine2);}
+    .pay-btn:disabled{opacity:.4;cursor:not-allowed;}
     .edit-row td{background:#f0f4f0;padding:14px 12px;border-bottom:2px solid var(--pine);}
     .edit-grid{display:grid;grid-template-columns:80px 1fr 160px 160px 100px 160px 100px 100px auto;gap:10px;align-items:end;}
     @media(max-width:1100px){.edit-grid{grid-template-columns:repeat(3,1fr);}}
@@ -151,8 +154,43 @@ export default function AuctionSettlement() {
   const connected = db === "live";
   const hdr = () => ({ "Content-Type": "application/json", "x-organizer-key": passcode });
   const setF = (k, v) => setForm((p) => ({ ...p, [k]: v }));
-  const findRanch = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).ranch || "";
+  const findRanch  = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).ranch    || "";
   const findBidder = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).bidderNo || "";
+  const findEmail  = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).email    || "";
+
+  // Mark lot paid when Stripe redirects back with ?lot_paid=<id>
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const paidId = params.get("lot_paid");
+    if (paidId) {
+      setLots((prev) => prev.map((l) => String(l.id) === paidId ? { ...l, buyerPaid: true } : l));
+      window.history.replaceState({}, "", "/?app=settlement");
+    }
+  }, []);
+
+  const startLotCheckout = async (lot) => {
+    if (!lot.amount || !lot.buyerName) return;
+    try {
+      const r = await fetch("/api/lot-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          passcode,
+          lotId: lot.id,
+          lotNo: lot.lotNo,
+          description: lot.description,
+          amount: lot.amount,
+          buyerName: lot.buyerName,
+          buyerEmail: findEmail(lot.buyerName),
+        }),
+      });
+      const data = await r.json();
+      if (data.url) window.location.href = data.url;
+      else alert("Stripe error: " + (data.error || "Unknown error"));
+    } catch (err) {
+      alert("Checkout failed: " + err.message);
+    }
+  };
   const parseBuyerInput = (val) => {
     // Strip "#42 - " prefix if the user selected from the datalist
     const m = val.match(/^#\S+\s+-\s+(.+)$/);
@@ -191,7 +229,7 @@ export default function AuctionSettlement() {
       if (!lr.ok) throw new Error(lr.status === 401 ? "Wrong passcode." : `Lots ${lr.status}`);
       const { lots: dbLots, lotFee } = await lr.json();
       setLots(dbLots.map(dbLotToUI)); setEventFee(lotFee);
-      try { const rr = await fetch("/api/registrants", { headers: hdr() }); if (rr.ok) { const rows = await rr.json(); const seen = new Set(); const ppl = []; rows.forEach((x) => { const k = (x.name || "").toLowerCase(); if (x.name && !seen.has(k)) { seen.add(k); ppl.push({ name: x.name, ranch: x.ranch || "", bidderNo: x.bidder_number || "" }); } }); setPeople(ppl); } } catch {}
+      try { const rr = await fetch("/api/registrants", { headers: hdr() }); if (rr.ok) { const rows = await rr.json(); const seen = new Set(); const ppl = []; rows.forEach((x) => { const k = (x.name || "").toLowerCase(); if (x.name && !seen.has(k)) { seen.add(k); ppl.push({ name: x.name, ranch: x.ranch || "", bidderNo: x.bidder_number || "", email: x.email || "" }); } }); setPeople(ppl); } } catch {}
       setDb("live"); setMsg(`Connected — ${dbLots.length} lot${dbLots.length === 1 ? "" : "s"} loaded.`);
     } catch (e) {
       setDb("offline"); setMsg(`Live DB unavailable (${e.message}) — working locally. Wired up once deployed.`);
@@ -335,7 +373,10 @@ export default function AuctionSettlement() {
                         <td><button className={`ci ${l.delivered ? "on" : ""}`} onClick={() => setLot(l.id, { delivered: !l.delivered, ...(l.delivered ? { checkNo: "", checkDate: "" } : {}) })}>{l.delivered ? <CheckCircle2 size={16} /> : <Circle size={16} />}<span className={`badge ${status === "paid" ? "b-paid" : status === "ready" ? "b-ready" : "b-wait"}`}>{status === "paid" ? "Paid" : status === "ready" ? "Ready" : "Awaiting"}</span></button></td>
                         <td><input className="mini" value={l.checkNo} disabled={!l.delivered} placeholder="—" onChange={(e) => setLot(l.id, { checkNo: e.target.value })} /></td>
                         <td><input className="mini" type="date" value={l.checkDate} disabled={!l.delivered} onChange={(e) => setLot(l.id, { checkDate: e.target.value })} /></td>
-                        <td style={{whiteSpace:"nowrap"}}>
+                        <td style={{whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
+                          {!l.buyerPaid && l.buyerName && l.amount > 0 && (
+                            <button className="pay-btn" title="Collect payment via Stripe" onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay</button>
+                          )}
                           <button className="edit-btn" title="Edit lot" onClick={() => editId === l.id ? cancelEdit() : startEdit(l)}>{editId === l.id ? <X size={15} /> : <Pencil size={15} />}</button>
                           <button className="trash" onClick={() => delLot(l.id)}><Trash2 size={15} /></button>
                         </td>
@@ -423,7 +464,12 @@ export default function AuctionSettlement() {
                       <td className="num">{money(c.fee)}</td>
                       <td className="num">{money(c.commission)}</td>
                       <td className="num net">{money(c.net)}</td>
-                      <td><button className={`ci ${l.buyerPaid ? "on" : ""}`} onClick={() => setLot(l.id, { buyerPaid: !l.buyerPaid })}>{l.buyerPaid ? <CheckCircle2 size={16}/> : <Circle size={16}/>}<span className={`badge ${l.buyerPaid ? "b-paid" : "b-wait"}`}>{l.buyerPaid ? "Paid" : "Unpaid"}</span></button></td>
+                      <td style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <button className={`ci ${l.buyerPaid ? "on" : ""}`} onClick={() => setLot(l.id, { buyerPaid: !l.buyerPaid })}>{l.buyerPaid ? <CheckCircle2 size={16}/> : <Circle size={16}/>}<span className={`badge ${l.buyerPaid ? "b-paid" : "b-wait"}`}>{l.buyerPaid ? "Paid" : "Unpaid"}</span></button>
+                        {!l.buyerPaid && l.buyerName && l.amount > 0 && (
+                          <button className="pay-btn" onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay</button>
+                        )}
+                      </td>
                     </tr>); })}
                 </tbody>
               </table>
