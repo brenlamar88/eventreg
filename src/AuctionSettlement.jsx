@@ -35,7 +35,7 @@ const dbLotToUI = (r) => ({
   buyer: r.buyer_name ? display(r.buyer_name, r.buyer_ranch || "") : "—",
   amount: Number(r.amount) || 0, amountPaid: Number(r.amount_paid) || 0, donated: !!r.donated,
   delivered: !!r.delivered, checkNo: r.check_no || "", checkDate: r.check_date || "",
-  buyerPaid: !!r.buyer_paid,
+  buyerPaid: !!r.buyer_paid, paymentMethod: r.payment_method || "cash",
 });
 
 const Styles = () => (
@@ -111,6 +111,9 @@ const Styles = () => (
     .pay-btn{font-family:inherit;font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;border:1.5px solid var(--pine);background:var(--pine);color:#fff;}
     .pay-btn:hover{background:var(--pine2);}
     .pay-btn:disabled{opacity:.4;cursor:not-allowed;}
+    .pmtog{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;font-size:11.5px;font-weight:700;}
+    .pmtog button{font-family:inherit;font-size:11.5px;font-weight:700;padding:4px 9px;border:none;cursor:pointer;background:#fff;color:var(--inkSoft);}
+    .pmtog button.on{background:var(--pine);color:#fff;}
     .edit-row td{background:#f0f4f0;padding:14px 12px;border-bottom:2px solid var(--pine);}
     .edit-grid{display:grid;grid-template-columns:80px 1fr 160px 160px 100px 160px 100px 100px auto;gap:10px;align-items:end;}
     @media(max-width:1100px){.edit-grid{grid-template-columns:repeat(3,1fr);}}
@@ -278,6 +281,7 @@ export default function AuctionSettlement() {
       if ("amount" in patch) dbPatch.amount = patch.amount;
       if ("amountPaid" in patch) dbPatch.amount_paid = patch.amountPaid;
       if ("buyerPaid" in patch) dbPatch.buyer_paid = patch.buyerPaid;
+      if ("paymentMethod" in patch) dbPatch.payment_method = patch.paymentMethod;
       try { await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...dbPatch }) }); } catch {}
     }
   };
@@ -295,6 +299,27 @@ export default function AuctionSettlement() {
   const buyers = useMemo(() => [...new Set(lots.map((l) => l.buyer).filter((b) => b !== "—"))].sort(), [lots]);
   const deliveredCount = lots.filter((l) => !l.donated && l.delivered).length;
   const paidCount = lots.filter((l) => !l.donated && l.checkNo).length;
+
+  const PayControls = ({ l }) => {
+    const isCash = l.paymentMethod !== "card";
+    const canPay = l.buyerName && l.amountPaid > 0 && !l.buyerPaid;
+    const markCashPaid = () => setLot(l.id, { buyerPaid: true });
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        <div className="pmtog">
+          <button className={isCash ? "on" : ""} onClick={() => setLot(l.id, { paymentMethod: "cash" })}>Cash/Check</button>
+          <button className={!isCash ? "on" : ""} onClick={() => setLot(l.id, { paymentMethod: "card" })}>Card</button>
+        </div>
+        {!l.buyerPaid && canPay && isCash && (
+          <button className="pay-btn" onClick={markCashPaid}><Check size={13}/> Mark Paid</button>
+        )}
+        {!l.buyerPaid && canPay && !isCash && (
+          <button className="pay-btn" onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay {money(l.amountPaid)}</button>
+        )}
+        {l.buyerPaid && <span className="badge b-paid" style={{fontSize:12}}>Paid</span>}
+      </div>
+    );
+  };
 
   const TabBtn = ({ id, icon: Icon, children }) => (<button className={`tab ${tab === id ? "on" : ""}`} onClick={() => setTab(id)}><Icon size={16} /> {children}</button>);
   const dotColor = db === "live" ? "var(--ok)" : db === "offline" ? "var(--warn)" : "#9DB3A8";
@@ -373,14 +398,11 @@ export default function AuctionSettlement() {
                         <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
                         <td className="num"><input className="amt-in" inputMode="decimal" value={l.amountPaid === 0 ? "" : l.amountPaid} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amountPaid: Number(v) || 0 }); }} /></td>
                         <td className="num" style={{fontWeight:700,color: balanceDue <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(Math.max(0, balanceDue))}</td>
-                        <td><button className={`ci ${l.buyerPaid ? "on" : ""}`} onClick={() => setLot(l.id, { buyerPaid: !l.buyerPaid })}>{l.buyerPaid ? <CheckCircle2 size={16}/> : <Circle size={16}/>}<span className={`badge ${l.buyerPaid ? "b-paid" : "b-wait"}`}>{l.buyerPaid ? "Paid" : "Unpaid"}</span></button></td>
+                        <td><PayControls l={l} /></td>
                         <td><button className={`ci ${l.delivered ? "on" : ""}`} onClick={() => setLot(l.id, { delivered: !l.delivered, ...(l.delivered ? { checkNo: "", checkDate: "" } : {}) })}>{l.delivered ? <CheckCircle2 size={16} /> : <Circle size={16} />}<span className={`badge ${status === "paid" ? "b-paid" : status === "ready" ? "b-ready" : "b-wait"}`}>{status === "paid" ? "Paid" : status === "ready" ? "Ready" : "Awaiting"}</span></button></td>
                         <td><input className="mini" value={l.checkNo} disabled={!l.delivered} placeholder="—" onChange={(e) => setLot(l.id, { checkNo: e.target.value })} /></td>
                         <td><input className="mini" type="date" value={l.checkDate} disabled={!l.delivered} onChange={(e) => setLot(l.id, { checkDate: e.target.value })} /></td>
                         <td style={{whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
-                          {!l.buyerPaid && l.buyerName && l.amountPaid > 0 && (
-                            <button className="pay-btn" title={`Charge ${money(l.amountPaid)} via Stripe`} onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay {money(l.amountPaid)}</button>
-                          )}
                           <button className="edit-btn" title="Edit lot" onClick={() => editId === l.id ? cancelEdit() : startEdit(l)}>{editId === l.id ? <X size={15} /> : <Pencil size={15} />}</button>
                           <button className="trash" onClick={() => delLot(l.id)}><Trash2 size={15} /></button>
                         </td>
@@ -470,12 +492,7 @@ export default function AuctionSettlement() {
                       <td className="num net">{money(c.net)}</td>
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amountPaid === 0 ? "" : l.amountPaid} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amountPaid: Number(v) || 0 }); }} /></td>
                       <td className="num" style={{fontWeight:700,color: balanceDue <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(Math.max(0, balanceDue))}</td>
-                      <td style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <button className={`ci ${l.buyerPaid ? "on" : ""}`} onClick={() => setLot(l.id, { buyerPaid: !l.buyerPaid })}>{l.buyerPaid ? <CheckCircle2 size={16}/> : <Circle size={16}/>}<span className={`badge ${l.buyerPaid ? "b-paid" : "b-wait"}`}>{l.buyerPaid ? "Paid" : "Unpaid"}</span></button>
-                        {!l.buyerPaid && l.buyerName && l.amountPaid > 0 && (
-                          <button className="pay-btn" onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay {money(l.amountPaid)}</button>
-                        )}
-                      </td>
+                      <td><PayControls l={l} /></td>
                     </tr>); })}
                 </tbody>
               </table>
