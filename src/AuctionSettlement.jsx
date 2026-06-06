@@ -169,7 +169,8 @@ export default function AuctionSettlement() {
   }, []);
 
   const startLotCheckout = async (lot) => {
-    if (!lot.amount || !lot.buyerName) return;
+    const chargeAmount = lot.amountPaid || 0;
+    if (!chargeAmount || !lot.buyerName) return;
     try {
       const r = await fetch("/api/lot-checkout", {
         method: "POST",
@@ -179,7 +180,7 @@ export default function AuctionSettlement() {
           lotId: lot.id,
           lotNo: lot.lotNo,
           description: lot.description,
-          amount: lot.amount,
+          amount: chargeAmount,
           buyerName: lot.buyerName,
           buyerEmail: findEmail(lot.buyerName),
         }),
@@ -377,8 +378,8 @@ export default function AuctionSettlement() {
                         <td><input className="mini" value={l.checkNo} disabled={!l.delivered} placeholder="—" onChange={(e) => setLot(l.id, { checkNo: e.target.value })} /></td>
                         <td><input className="mini" type="date" value={l.checkDate} disabled={!l.delivered} onChange={(e) => setLot(l.id, { checkDate: e.target.value })} /></td>
                         <td style={{whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
-                          {!l.buyerPaid && l.buyerName && l.amount > 0 && (
-                            <button className="pay-btn" title="Collect payment via Stripe" onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay</button>
+                          {!l.buyerPaid && l.buyerName && l.amountPaid > 0 && (
+                            <button className="pay-btn" title={`Charge ${money(l.amountPaid)} via Stripe`} onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay {money(l.amountPaid)}</button>
                           )}
                           <button className="edit-btn" title="Edit lot" onClick={() => editId === l.id ? cancelEdit() : startEdit(l)}>{editId === l.id ? <X size={15} /> : <Pencil size={15} />}</button>
                           <button className="trash" onClick={() => delLot(l.id)}><Trash2 size={15} /></button>
@@ -471,8 +472,8 @@ export default function AuctionSettlement() {
                       <td className="num" style={{fontWeight:700,color: balanceDue <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(Math.max(0, balanceDue))}</td>
                       <td style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                         <button className={`ci ${l.buyerPaid ? "on" : ""}`} onClick={() => setLot(l.id, { buyerPaid: !l.buyerPaid })}>{l.buyerPaid ? <CheckCircle2 size={16}/> : <Circle size={16}/>}<span className={`badge ${l.buyerPaid ? "b-paid" : "b-wait"}`}>{l.buyerPaid ? "Paid" : "Unpaid"}</span></button>
-                        {!l.buyerPaid && l.buyerName && l.amount > 0 && (
-                          <button className="pay-btn" onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay</button>
+                        {!l.buyerPaid && l.buyerName && l.amountPaid > 0 && (
+                          <button className="pay-btn" onClick={() => startLotCheckout(l)}><CreditCard size={13}/> Pay {money(l.amountPaid)}</button>
                         )}
                       </td>
                     </tr>); })}
