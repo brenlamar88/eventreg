@@ -386,12 +386,14 @@ export default function BoilOnTheBend() {
 
   const completeRegistration = async () => {
     const a = attendees[0];
+    const bidderNo = String(nextBidderNumber());
     const row = {
       name: `${a.firstName} ${a.lastName}`.trim(), email: a.email, phone: a.phone,
       party: qty, source: "Online", status: "Paid", amount: total, notes: a.notes || null, ranch: a.ranch || null,
+      bidder_number: bidderNo,
     };
     try { await dbInsert(row); } catch (err) { console.warn("DB write skipped:", err.message); }
-    setRoster((r) => [{ ...row, checkedIn: false, date: new Date().toISOString().slice(0, 10) }, ...r]);
+    setRoster((r) => [{ ...row, checkedIn: false, date: new Date().toISOString().slice(0, 10), bidderNumber: bidderNo }, ...r]);
     setStep(3); window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -472,6 +474,21 @@ export default function BoilOnTheBend() {
     }
   };
 
+  const savePhone = async (idx, value) => {
+    const target = roster[idx];
+    setRoster((r) => r.map((p, i) => i === idx ? { ...p, phone: value } : p));
+    if (target.id && passcode) {
+      try {
+        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, phone: value || null }) });
+      } catch (err) { /* keep optimistic local state */ }
+    }
+  };
+
+  const nextBidderNumber = () => {
+    const nums = roster.map((p) => parseInt(p.bidderNumber || "0", 10)).filter((n) => !isNaN(n) && n > 0);
+    return nums.length ? Math.max(...nums) + 1 : 1;
+  };
+
   const filtered = roster.filter((p) => `${p.name} ${p.email} ${p.phone}`.toLowerCase().includes(search.toLowerCase()));
   const totalGuests = roster.reduce((s, p) => s + (p.party || 1), 0);
   const checkedIn = roster.filter((p) => p.checkedIn).length;
@@ -508,14 +525,15 @@ export default function BoilOnTheBend() {
       if (!walkInForm.firstName.trim()) { setWalkInMsg("First name is required."); return; }
       setWalkInLoading(true);
       const fullName = `${walkInForm.firstName.trim()} ${walkInForm.lastName.trim()}`.trim();
+      const bidderNo = String(nextBidderNumber());
       const row = {
         name: fullName, phone: walkInForm.phone.trim(), ranch: walkInForm.ranch.trim() || null,
         notes: walkInForm.ranch.trim() || null,
         party: walkInForm.party || 1, source: "Walk-in",
-        status: "Paid", amount: walkInTotal, checked_in: true,
+        status: "Paid", amount: walkInTotal, checked_in: true, bidder_number: bidderNo,
       };
       try { await dbInsert(row); } catch (err) { /* offline fallback */ }
-      const uiRow = { ...row, checkedIn: true, date: new Date().toISOString().slice(0, 10), id: `wi-${Date.now()}` };
+      const uiRow = { ...row, checkedIn: true, date: new Date().toISOString().slice(0, 10), id: `wi-${Date.now()}`, bidderNumber: bidderNo };
       setRoster((r) => [uiRow, ...r]);
       setWalkIns((w) => [{ ...row, payment: "cash", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }, ...w]);
       setWalkInForm({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: walkInForm.payment });
@@ -776,19 +794,21 @@ export default function BoilOnTheBend() {
           <div className="rtools"><div className="searchbox"><Search size={16} color="var(--inkSoft)" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, phone…" /></div></div>
 
           <table className="tbl">
-            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Contact</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
+            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
                 const idx = roster.indexOf(p);
                 const { first, last } = splitName(p.name);
                 const ranch = p.ranch || p.notes || "—";
+                const inpStyle = { fontFamily: "inherit", fontSize: 12.5, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, width: "100%", minWidth: 90 };
                 return (
                   <tr key={p.id || i}>
                     <td><input style={{ fontFamily: "inherit", fontSize: 13, fontWeight: 700, width: 64, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, textAlign: "center" }} value={p.bidderNumber || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x, xi) => xi === idx ? { ...x, bidderNumber: e.target.value } : x))} onBlur={(e) => saveBidderNumber(idx, e.target.value)} /></td>
                     <td style={{ fontWeight: 700 }}>{first}</td>
                     <td style={{ fontWeight: 700 }}>{last}</td>
                     <td style={{ color: "var(--inkSoft)" }}>{ranch}</td>
-                    <td style={{ color: "var(--inkSoft)" }}>{p.email}<br /><span style={{ fontSize: 12 }}>{p.phone}</span></td>
+                    <td style={{ color: "var(--inkSoft)", fontSize: 12.5 }}>{p.email}</td>
+                    <td><input style={inpStyle} value={p.phone || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x, xi) => xi === idx ? { ...x, phone: e.target.value } : x))} onBlur={(e) => savePhone(idx, e.target.value)} /></td>
                     <td>{p.party || 1}</td>
                     <td><span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span></td>
                     <td><button className={`ci ${p.checkedIn ? "on" : ""}`} onClick={() => toggleCheckIn(idx)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? "In" : "Check in"}</button></td>
@@ -796,7 +816,7 @@ export default function BoilOnTheBend() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
             </tbody>
           </table>
         </div>
