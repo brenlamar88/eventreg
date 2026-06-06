@@ -54,7 +54,7 @@ export default async function handler(req, res) {
             "Content-Type": "application/json",
             Prefer: "return=minimal",
           },
-          body: JSON.stringify({ buyer_paid: true }),
+          body: JSON.stringify({ buyer_paid: true, amount_paid: (s.amount_total || 0) / 100 }),
         });
       } catch (err) {
         console.error("Supabase lot patch (webhook) failed:", err);
