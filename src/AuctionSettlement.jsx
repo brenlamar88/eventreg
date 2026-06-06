@@ -153,7 +153,17 @@ export default function AuctionSettlement() {
   const setF = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const findRanch = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).ranch || "";
   const findBidder = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).bidderNo || "";
-  const onNameChange = (which, v) => setForm((p) => ({ ...p, [which + "Name"]: v, [which + "Ranch"]: findRanch(v) || p[which + "Ranch"] }));
+  const parseBuyerInput = (val) => {
+    // Strip "#42 - " prefix if the user selected from the datalist
+    const m = val.match(/^#\S+\s+-\s+(.+)$/);
+    return m ? m[1].trim() : val;
+  };
+  const onBuyerChange = (lotId, rawVal, currentRanch) => {
+    const name = parseBuyerInput(rawVal);
+    const ranch = findRanch(name) || currentRanch;
+    setLot(lotId, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" });
+  };
+  const onNameChange = (which, v) => { const name = which === "buyer" ? parseBuyerInput(v) : v; setForm((p) => ({ ...p, [which + "Name"]: name, [which + "Ranch"]: findRanch(name) || p[which + "Ranch"] })); };
   const rememberPerson = (name, ranch) => { if (name) setPeople((prev) => prev.some((p) => p.name.toLowerCase() === name.toLowerCase()) ? prev : [...prev, { name, ranch: ranch || "" }]); };
 
   const saveLotEdit = async () => {
@@ -251,7 +261,7 @@ export default function AuctionSettlement() {
 
   return (
     <div className="ewa"><Styles />
-      <datalist id="people-list">{people.map((p) => <option key={p.name} value={p.name} />)}</datalist>
+      <datalist id="people-list">{people.map((p) => <option key={p.name} value={p.bidderNo ? `#${p.bidderNo} - ${p.name}` : p.name} />)}</datalist>
       <div className="head"><div className="wrap head-in">
         <div className="eyebrow">Exotic Wildlife Association · 2026 Annual Membership Meeting</div>
         <h1 className="serif">Auction Settlement</h1>
@@ -317,7 +327,7 @@ export default function AuctionSettlement() {
                       <tr>
                         <td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td>
                         <td>
-                          <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} />
+                          <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => onBuyerChange(l.id, e.target.value, l.buyerRanch)} />
                           {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
                         </td>
                         <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
@@ -406,7 +416,7 @@ export default function AuctionSettlement() {
                       <td>{l.description || "—"}</td>
                       <td style={{color:"var(--inkSoft)",fontSize:12.5}}>{l.consignorName || "—"}</td>
                       <td>
-                        <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Enter buyer…" onChange={(e) => { const name = e.target.value; const ranch = findRanch(name) || l.buyerRanch; setLot(l.id, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" }); }} />
+                        <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Enter buyer…" onChange={(e) => onBuyerChange(l.id, e.target.value, l.buyerRanch)} />
                         {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
                       </td>
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td>
