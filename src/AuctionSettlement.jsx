@@ -15,6 +15,7 @@ import {
 function rateFor(amt) { if (amt >= 10000) return 0.09; if (amt > 5000) return 0.10; return 0.11; }
 function calc(lot, eventFee) {
   if (lot.donated) return { rate: 0, fee: 0, commission: 0, net: 0 };
+  if (lot.category === "Grand Auction") { const fee = Number(eventFee) || 0; return { rate: 0, fee, commission: 0, net: lot.amount - fee }; }
   const rate = rateFor(lot.amount);
   const commission = Math.round(lot.amount * rate * 100) / 100;
   const fee = Number(eventFee) || 0;
