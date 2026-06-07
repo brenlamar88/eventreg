@@ -15,6 +15,7 @@ import {
 function rateFor(amt) { if (amt >= 10000) return 0.09; if (amt > 5000) return 0.10; return 0.11; }
 function calc(lot, eventFee) {
   if (lot.donated) return { rate: 0, fee: 0, commission: 0, net: 0 };
+  if (lot.category === "Grand Auction") { const fee = Number(eventFee) || 0; return { rate: 0, fee, commission: 0, net: lot.amount - fee }; }
   const rate = rateFor(lot.amount);
   const commission = Math.round(lot.amount * rate * 100) / 100;
   const fee = Number(eventFee) || 0;
@@ -150,6 +151,7 @@ export default function AuctionSettlement() {
   const [buyerSel, setBuyerSel] = useState("");
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [grandFormErr, setGrandFormErr] = useState("");
   const setEF = (k, v) => setEditForm((p) => ({ ...p, [k]: v }));
   const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated }); };
   const cancelEdit = () => { setEditId(null); setEditForm({}); };
@@ -249,6 +251,37 @@ export default function AuctionSettlement() {
       consignorName: form.consignorName.trim(), consignorRanch: form.consignorRanch.trim(),
       buyerName: form.buyerName.trim(), buyerRanch: form.buyerRanch.trim(),
       amount: Number(form.amount) || 0, donated: form.donated,
+    };
+    const ui = {
+      id: "tmp-" + Date.now(), ...base,
+      consignor: display(base.consignorName, base.consignorRanch),
+      buyer: base.buyerName ? display(base.buyerName, base.buyerRanch) : "—",
+      delivered: false, checkNo: "", checkDate: "",
+      buyerPaid: false, amountPaid: 0, paymentMethod: "cash",
+    };
+    setLots((p) => [...p, ui]);
+    rememberPerson(base.consignorName, base.consignorRanch);
+    rememberPerson(base.buyerName, base.buyerRanch);
+    setForm(blankForm);
+    if (connected) {
+      const c = calc(base, eventFee);
+      try {
+        const r = await fetch("/api/lots", { method: "POST", headers: hdr(), body: JSON.stringify({ ...base, commission: c.commission, net: c.net, lotFee: null }) });
+        if (r.ok) { const row = await r.json(); setLots((p) => p.map((l) => l.id === ui.id ? { ...l, id: row.id } : l)); }
+      } catch {}
+    }
+  };
+
+  const addGrandLot = async () => {
+    setGrandFormErr("");
+    if (!form.lotNo.trim()) { setGrandFormErr("Lot # is required."); return; }
+    if (!form.consignorName.trim()) { setGrandFormErr("Consignor name is required."); return; }
+    if (form.amount === "" || form.amount === "0") { setGrandFormErr("Sale amount is required."); return; }
+    const base = {
+      lotNo: form.lotNo.trim(), description: form.description.trim(), category: "Grand Auction",
+      consignorName: form.consignorName.trim(), consignorRanch: form.consignorRanch.trim(),
+      buyerName: form.buyerName.trim(), buyerRanch: form.buyerRanch.trim(),
+      amount: Number(form.amount) || 0, donated: false,
     };
     const ui = {
       id: "tmp-" + Date.now(), ...base,
@@ -468,33 +501,6 @@ export default function AuctionSettlement() {
           const grandLots = lots.filter((l) => l.category === "Grand Auction").sort((a, b) => Number(a.lotNo) - Number(b.lotNo));
           const totSold = grandLots.reduce((a, l) => a + l.amount, 0);
           const withBuyer = grandLots.filter((l) => l.buyerName).length;
-          const addGrandLot = async () => {
-            if (!form.lotNo.trim() || !form.consignorName.trim() || form.amount === "") return;
-            const base = {
-              lotNo: form.lotNo.trim(), description: form.description.trim(), category: "Grand Auction",
-              consignorName: form.consignorName.trim(), consignorRanch: form.consignorRanch.trim(),
-              buyerName: form.buyerName.trim(), buyerRanch: form.buyerRanch.trim(),
-              amount: Number(form.amount) || 0, donated: false,
-            };
-            const ui = {
-              id: "tmp-" + Date.now(), ...base,
-              consignor: display(base.consignorName, base.consignorRanch),
-              buyer: base.buyerName ? display(base.buyerName, base.buyerRanch) : "—",
-              delivered: false, checkNo: "", checkDate: "",
-              buyerPaid: false, amountPaid: 0, paymentMethod: "cash",
-            };
-            setLots((p) => [...p, ui]);
-            rememberPerson(base.consignorName, base.consignorRanch);
-            rememberPerson(base.buyerName, base.buyerRanch);
-            setForm(blankForm);
-            if (connected) {
-              const c = calc(base, eventFee);
-              try {
-                const r = await fetch("/api/lots", { method: "POST", headers: hdr(), body: JSON.stringify({ ...base, commission: c.commission, net: c.net, lotFee: null }) });
-                if (r.ok) { const row = await r.json(); setLots((p) => p.map((l) => l.id === ui.id ? { ...l, id: row.id } : l)); }
-              } catch {}
-            }
-          };
           return (<>
             <div className="addcard">
               <div className="addhdr"><Plus size={17} /> Add Grand Auction lot</div>
@@ -506,8 +512,9 @@ export default function AuctionSettlement() {
                 <div className="f span4"><label>Buyer name</label><input list="people-list" value={form.buyerName} onChange={(e) => onNameChange("buyer", e.target.value)} placeholder="Start typing…" /></div>
                 <div className="f span2"><label>Ranch</label><input value={form.buyerRanch} onChange={(e) => setF("buyerRanch", e.target.value)} placeholder="Ranch" /></div>
                 <div className="f span3"><label>Sale amount</label><input value={form.amount} inputMode="decimal" onChange={(e) => setF("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="6000" /></div>
-                <div className="f span9" style={{ justifyContent: "flex-end", alignItems: "flex-end" }}><button className="btn" onClick={addGrandLot}><Plus size={16} /> Add Grand Auction lot</button></div>
+                <div className="f span3" style={{ justifyContent: "flex-end", alignItems: "flex-end" }}><button className="btn" onClick={addGrandLot}><Plus size={16} /> Add lot</button></div>
               </div>
+              {grandFormErr && <div className="hint" style={{color:"var(--warn)",marginTop:10}}><AlertTriangle size={13}/> {grandFormErr}</div>}
             </div>
             {grandLots.length === 0
               ? <div className="empty"><div className="big">No Grand Auction lots yet</div>Use the form above to add lots.</div>
