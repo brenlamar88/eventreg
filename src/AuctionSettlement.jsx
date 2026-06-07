@@ -326,8 +326,9 @@ export default function AuctionSettlement() {
 
   const grand = useMemo(() => lots.reduce((a, l) => { if (!l.donated) { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; } return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }), [lots, eventFee]);
   const byConsignor = useMemo(() => {
+    const sortLot = (a, b) => Number(a.lotNo) - Number(b.lotNo) || a.lotNo.localeCompare(b.lotNo);
     const map = {}; lots.forEach((l) => { if (!l.donated) (map[l.consignor] ||= []).push(l); });
-    return Object.entries(map).map(([name, ls]) => { const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }); return { name, ls, t }; }).sort((a, b) => b.t.net - a.t.net);
+    return Object.entries(map).map(([name, ls]) => { ls.sort(sortLot); const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }); return { name, ls, t, minLot: ls[0]?.lotNo ?? "" }; }).sort((a, b) => Number(a.minLot) - Number(b.minLot) || a.minLot.localeCompare(b.minLot));
   }, [lots, eventFee]);
   const consignors = useMemo(() => [...new Set(lots.map((l) => l.consignor))].sort(), [lots]);
   const buyers = useMemo(() => [...new Set(lots.map((l) => l.buyer).filter((b) => b !== "—"))].sort(), [lots]);
