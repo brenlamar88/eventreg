@@ -255,6 +255,7 @@ export default function AuctionSettlement() {
       consignor: display(base.consignorName, base.consignorRanch),
       buyer: base.buyerName ? display(base.buyerName, base.buyerRanch) : "—",
       delivered: false, checkNo: "", checkDate: "",
+      buyerPaid: false, amountPaid: 0, paymentMethod: "cash",
     };
     setLots((p) => [...p, ui]);
     rememberPerson(base.consignorName, base.consignorRanch);
