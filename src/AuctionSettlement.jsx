@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
-  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard,
+  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download,
 } from "lucide-react";
 
 /* ============================================================================
@@ -25,6 +25,15 @@ const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDi
 const money0 = (n) => "$" + Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
 const display = (name, ranch) => ranch ? `${name} — ${ranch}` : name;
 const CATEGORIES = ["Elite Registry", "Exotic Conservation", "Grand Auction", "Raffle", "Golf", "Fuller Family", "Donated"];
+
+function csvEsc(v) { const s = v == null ? "" : String(v); return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s; }
+function downloadCsv(filename, rows) {
+  const csv = rows.map((r) => r.map(csvEsc).join(",")).join("\r\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
 
 /* ---- data layer (yellow-kite via same-origin API; falls back to local) ---- */
 const dbLotToUI = (r) => ({
@@ -371,6 +380,7 @@ export default function AuctionSettlement() {
           <TabBtn id="grand" icon={Receipt}>Grand Auction</TabBtn>
           <TabBtn id="consignor" icon={FileText}>Consignor Ledger</TabBtn>
           <TabBtn id="buyer" icon={Receipt}>Buyer Ledger</TabBtn>
+          <TabBtn id="reports" icon={Download}>Reports</TabBtn>
         </div>
       </div></div>
 
@@ -574,6 +584,80 @@ export default function AuctionSettlement() {
                 <div className="totline"><span>Amount paid</span><span>{money(totalPaid)}</span></div>
                 <div className="totline big"><span>Balance due</span><span style={{color: totalBalance > 0 ? "var(--warn)" : "var(--ok)"}}>{money(totalBalance)}</span></div>
               </div>
+            </div>
+          </>);
+        })()}
+
+        {tab === "reports" && (() => {
+          const fmt2 = (n) => Number(n).toFixed(2);
+
+          const exportAllLots = () => {
+            const hdr = ["Lot #","Description","Category","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
+            const rows = [...lots].sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
+              const c=calc(l,eventFee);
+              return [l.lotNo,l.description,l.category,l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),fmt2(l.amount),fmt2(c.fee),fmt2(c.commission),fmt2(c.net),fmt2(l.amountPaid||0),fmt2(Math.max(0,l.amount-(l.amountPaid||0))),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+            });
+            downloadCsv("lots-all.csv",[hdr,...rows]);
+          };
+
+          const exportBuyerSummary = () => {
+            const hdr = ["Buyer","Bidder #","Ranch","Lots Purchased","Total Amount","Amount Paid","Balance Due"];
+            const map = {};
+            lots.forEach((l)=>{ if(!l.buyerName) return; (map[l.buyerName]||=([])).push(l); });
+            const rows = Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,ls])=>{
+              const total=ls.reduce((a,l)=>a+l.amount,0);
+              const paid=ls.reduce((a,l)=>a+(l.amountPaid||0),0);
+              return [name,findBidder(name),findRanch(name),ls.length,fmt2(total),fmt2(paid),fmt2(Math.max(0,total-paid))];
+            });
+            downloadCsv("buyers-summary.csv",[hdr,...rows]);
+          };
+
+          const exportConsignorSummary = () => {
+            const hdr = ["Consignor","Ranch","Lots","Gross","Lot Fees","Commission","Net Due"];
+            const rows = byConsignor.map(({name,ls,t})=>{
+              const ranch = ls[0]?.consignorRanch||"";
+              return [name,ranch,ls.length,fmt2(t.lotTotal),fmt2(t.fees),fmt2(t.commission),fmt2(t.net)];
+            });
+            downloadCsv("consignors-summary.csv",[hdr,...rows]);
+          };
+
+          const [regRows, setRegRows] = useState([]);
+          const [regLoading, setRegLoading] = useState(false);
+          const exportRegistrations = async () => {
+            setRegLoading(true);
+            try {
+              const r = await fetch("/api/registrants", { headers: hdr() });
+              const data = r.ok ? await r.json() : [];
+              const rows = (Array.isArray(data)?data:[]).map((x)=>[
+                x.bidder_number||"", x.name||"", x.email||"", x.phone||"",
+                x.ranch||x.notes||"", x.party||1, x.status||"", x.source||"",
+                x.amount||0, x.checked_in?"Yes":"No", (x.created_at||"").slice(0,10)
+              ]);
+              downloadCsv("registrations.csv",[["Bidder #","Name","Email","Phone","Ranch / Company","Party Size","Status","Source","Amount Paid","Checked In","Date"],...rows]);
+            } catch(e){ alert("Failed to load registrations: "+e.message); }
+            setRegLoading(false);
+          };
+
+          const Card = ({title, desc, onClick, loading}) => (
+            <div style={{background:"var(--paper)",border:"1.5px solid var(--line)",borderRadius:14,padding:"22px 24px",display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{fontFamily:"'Fraunces',serif",fontSize:17,fontWeight:600}}>{title}</div>
+              <div style={{fontSize:13,color:"var(--inkSoft)",flex:1}}>{desc}</div>
+              <button className="btn" onClick={onClick} disabled={loading} style={{alignSelf:"flex-start"}}>
+                <Download size={15}/> {loading?"Preparing…":"Download CSV"}
+              </button>
+            </div>
+          );
+
+          return (<>
+            <div style={{marginBottom:16}}>
+              <div className="addhdr" style={{fontFamily:"'Fraunces',serif",fontSize:20,fontWeight:600,marginBottom:6}}><Download size={18}/> Export Reports</div>
+              <div style={{fontSize:13,color:"var(--inkSoft)"}}>All CSV files open directly in Excel. Connect with your organizer passcode first to export live data.</div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
+              <Card title="All Lots" desc="Every lot with consignor, buyer, sale amount, fees, commission, net, payment status, and delivery info." onClick={exportAllLots} />
+              <Card title="Buyer Summary" desc="One row per buyer showing bidder number, ranch, lots purchased, total amount, amount paid, and balance due." onClick={exportBuyerSummary} />
+              <Card title="Consignor Summary" desc="One row per consignor showing lot count, gross sales, lot fees, commission, and net check amount." onClick={exportConsignorSummary} />
+              <Card title="Registrations" desc="Full registration roster with bidder numbers, contact info, party size, payment status, and check-in." onClick={exportRegistrations} loading={regLoading} />
             </div>
           </>);
         })()}
