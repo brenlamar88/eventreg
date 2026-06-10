@@ -154,6 +154,7 @@ export default function AuctionSettlement() {
   const [passcode, setPasscode] = useState("");
   const [db, setDb] = useState("idle");      // idle | loading | live | offline
   const [msg, setMsg] = useState("");
+  const [regLoading, setRegLoading] = useState(false);
   const blankForm = { lotNo: "", description: "", category: "Elite Registry", consignorName: "", consignorRanch: "", buyerName: "", buyerRanch: "", amount: "", donated: false };
   const [form, setForm] = useState(blankForm);
   const [consignorSel, setConsignorSel] = useState("");
@@ -621,8 +622,6 @@ export default function AuctionSettlement() {
             downloadCsv("consignors-summary.csv",[hdr,...rows]);
           };
 
-          const [regRows, setRegRows] = useState([]);
-          const [regLoading, setRegLoading] = useState(false);
           const exportRegistrations = async () => {
             setRegLoading(true);
             try {
