@@ -545,10 +545,11 @@ export default function AuctionSettlement() {
                 <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>
               </div>
               <table className="tbl">
-                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th></tr></thead>
+                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th></th></tr></thead>
                 <tbody>
                   {grandLots.map((l) => { const c = calc(l, eventFee); const bidderNo = findBidder(l.buyerName); const balanceDue = l.amount - (l.amountPaid || 0); return (
-                    <tr key={l.id} style={!l.buyerName ? {background:"#fff8f3"} : {}}>
+                    <React.Fragment key={l.id}>
+                    <tr style={!l.buyerName ? {background:"#fff8f3"} : {}}>
                       <td className="lot">{l.lotNo}</td>
                       <td>{l.description || "—"}</td>
                       <td style={{color:"var(--inkSoft)",fontSize:12.5}}>{l.consignorName || "—"}</td>
@@ -563,7 +564,28 @@ export default function AuctionSettlement() {
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amountPaid === 0 ? "" : l.amountPaid} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amountPaid: Number(v) || 0 }); }} /></td>
                       <td className="num" style={{fontWeight:700,color: balanceDue <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(Math.max(0, balanceDue))}</td>
                       <td><PayControls l={l} /></td>
-                    </tr>); })}
+                      <td style={{whiteSpace:"nowrap"}}>
+                        <button className="edit-btn" title="Edit lot" onClick={() => editId === l.id ? cancelEdit() : startEdit(l)}>{editId === l.id ? <X size={15}/> : <Pencil size={15}/>}</button>
+                        <button className="trash" onClick={() => delLot(l.id)}><Trash2 size={15}/></button>
+                      </td>
+                    </tr>
+                    {editId === l.id && (
+                      <tr className="edit-row">
+                        <td colSpan={12}>
+                          <div className="edit-grid">
+                            <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
+                            <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
+                            <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
+                            <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
+                            <div className="f" style={{flexDirection:"row",gap:8,alignItems:"flex-end"}}>
+                              <button className="btn" style={{fontSize:13,padding:"7px 14px"}} onClick={saveLotEdit}><Check size={14}/> Save</button>
+                              <button className="btn ghost" style={{fontSize:13,padding:"7px 12px"}} onClick={cancelEdit}><X size={14}/> Cancel</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>); })}
                 </tbody>
               </table>
               <div className="grand" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
