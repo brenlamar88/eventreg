@@ -541,7 +541,9 @@ export default function AuctionSettlement() {
               ? <div className="empty"><div className="big">No Grand Auction lots yet</div>Use the form above to add lots.</div>
               : (<>
               <div className="bar" style={{justifyContent:"space-between"}}>
-                <span style={{fontSize:13,fontWeight:600,color:"var(--inkSoft)"}}>{withBuyer} of {grandLots.length} lots have a buyer · {money(totSold)} total</span>
+                <span style={{fontSize:13,fontWeight:600,color:"var(--inkSoft)"}}>
+                  {grandLots.length} lots total · <span style={{color:"var(--ok)"}}>{withBuyer} assigned</span>{grandLots.length - withBuyer > 0 && <span style={{color:"var(--warn)"}}> · {grandLots.length - withBuyer} need a buyer</span>} · {money(totSold)} total
+                </span>
                 <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>
               </div>
               <table className="tbl">
@@ -549,7 +551,7 @@ export default function AuctionSettlement() {
                 <tbody>
                   {grandLots.map((l) => { const c = calc(l, eventFee); const bidderNo = findBidder(l.buyerName); const balanceDue = l.amount - (l.amountPaid || 0); return (
                     <React.Fragment key={l.id}>
-                    <tr style={!l.buyerName ? {background:"#fff8f3"} : {}}>
+                    <tr style={!l.buyerName ? {background:"#fff0e6",outline:"1px solid #f5c9a0"} : {}}>
                       <td className="lot">{l.lotNo}</td>
                       <td>{l.description || "—"}</td>
                       <td style={{color:"var(--inkSoft)",fontSize:12.5}}>{l.consignorName || "—"}</td>
