@@ -143,7 +143,12 @@ const Styles = () => (
     .secLabel{font-family:'Fraunces',serif;font-weight:600;font-size:13px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 6px;}
     .totline{display:flex;justify-content:space-between;padding:7px 2px;font-size:14px;border-top:1px solid var(--line);}
     .totline.big{font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--pine);border-top:2px solid var(--pine);margin-top:4px;padding-top:12px;}
-    @media print {.head,.bar,.settings,.addcard,.btn{display:none !important;} .ewa{background:#fff;}}
+    @media print {
+      @page { margin: 0; }
+      body { margin: 15mm; }
+      .head,.bar,.settings,.addcard,.btn,.OrganizerNav,nav{display:none !important;}
+      .ewa{background:#fff;}
+    }
   `}</style>
 );
 
@@ -491,11 +496,12 @@ export default function AuctionSettlement() {
           if (lots.length === 0) return <div className="empty"><div className="big">No consignors yet</div>Add lots on the Payment Detail tab.</div>;
           const sel = consignorSel || consignors[0] || "";
           const ls = lots.filter((l) => l.consignor === sel);
+          const printConsignor = () => { const prev = document.title; document.title = `Consignor Ledger - ${sel} - 2026 AMM`; window.print(); setTimeout(() => { document.title = prev; }, 1000); };
           const donated = ls.filter((l) => l.donated), sold = ls.filter((l) => !l.donated);
           const donatedTotal = donated.reduce((a, l) => a + l.amount, 0);
           const t = sold.reduce((a, l) => { const c = calc(l, eventFee); a.gross += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { gross: 0, fees: 0, commission: 0, net: 0 });
           return (<>
-            <div className="bar"><select className="sel" value={sel} onChange={(e) => setConsignorSel(e.target.value)}>{consignors.map((c) => <option key={c}>{c}</option>)}</select><button className="btn ghost" onClick={() => window.print()}><Printer size={15} /> Print / PDF</button></div>
+            <div className="bar"><select className="sel" value={sel} onChange={(e) => setConsignorSel(e.target.value)}>{consignors.map((c) => <option key={c}>{c}</option>)}</select><button className="btn ghost" onClick={printConsignor}><Printer size={15} /> Print / PDF</button></div>
             <div className="ledger">
               <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">Consignor Ledger · 2026 AMM</div></div><div style={{ textAlign: "right" }}><div className="whosub">Net due once delivered</div><div className="who serif" style={{ color: "var(--pine)" }}>{money(t.net)}</div></div></div>
               {donated.length > 0 && (<><div className="secLabel">Lots Donated (100% to EWA)</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th></tr></thead><tbody>{donated.map((l) => { const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td>{l.buyer}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td></tr>; })}<tr className="sub"><td colSpan={4}>Donated total</td><td className="num">{money(donatedTotal)}</td></tr></tbody></table></>)}
