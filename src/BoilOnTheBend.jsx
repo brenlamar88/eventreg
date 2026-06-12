@@ -5,6 +5,7 @@ import {
   Upload, Heart, LayoutGrid, Ticket, Database, RefreshCw, AlertTriangle,
   ScanLine, CreditCard, FileText,
 } from "lucide-react";
+import OrganizerNav from "./OrganizerNav.jsx";
 
 /* ============================================================================
    1. EVENT CONFIG
@@ -889,7 +890,7 @@ export default function BoilOnTheBend() {
   /* ---------- WIZARD ---------- */
   const STEPS = ["Tickets", "Guests", "Checkout"];
   return (
-    <div className="mrd"><Styles /><UtilBar />
+    <div className="mrd"><Styles /><OrganizerNav /><UtilBar />
       <div className="stepbar"><div className="wrap steps">
         {STEPS.map((l, i) => (<div key={l} className={`stp ${i === step ? "active" : i < step ? "done" : ""}`}><span className="num">{i < step ? <Check size={13} strokeWidth={3} /> : i + 1}</span>{l}</div>))}
       </div></div>
