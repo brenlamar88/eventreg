@@ -56,6 +56,7 @@ const dbRowToUI = (r) => ({
   source: r.source, status: r.status, amount: Number(r.amount) || 0,
   checkedIn: r.checked_in, date: (r.created_at || "").slice(0, 10),
   notes: r.notes || null, ranch: r.ranch || null, bidderNumber: r.bidder_number || "",
+  sponsorId: r.sponsor_id || null, sponsorName: r.sponsor_name || null,
 });
 
 /* ============================================================================
@@ -321,6 +322,7 @@ export default function BoilOnTheBend() {
   const [confCode] = useState(() => "BOTB-" + Math.random().toString(36).slice(2, 7).toUpperCase());
 
   const [roster, setRoster] = useState(SAMPLE_ROSTER);
+  const [sponsors, setSponsors] = useState([]);
   const [search, setSearch] = useState("");
   const [importText, setImportText] = useState("");
   const [importMsg, setImportMsg] = useState("");
@@ -439,6 +441,8 @@ export default function BoilOnTheBend() {
       const rows = await r.json();
       setRoster(rows.map(dbRowToUI));
       setDbState("live"); setDbMsg(`Loaded ${rows.length} registrant${rows.length === 1 ? "" : "s"} from yellow-kite.`);
+      // Load sponsors for association dropdown (best-effort)
+      try { const sr = await fetch("/api/sponsors", { headers: { "x-organizer-key": pc } }); if (sr.ok) { const sd = await sr.json(); setSponsors(Array.isArray(sd) ? sd : []); } } catch {}
     } catch (err) {
       setDbState("offline");
       setDbMsg(`Live DB unavailable (${err.message}) — showing local data. This works once deployed to Vercel.`);
@@ -496,6 +500,17 @@ export default function BoilOnTheBend() {
       try {
         await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, phone: value || null }) });
       } catch (err) { /* keep optimistic local state */ }
+    }
+  };
+
+  const saveSponsor = async (idx, sponsorId) => {
+    const target = roster[idx];
+    const sp = sponsors.find((s) => s.id === sponsorId) || null;
+    setRoster((r) => r.map((p, i) => i === idx ? { ...p, sponsorId: sponsorId || null, sponsorName: sp?.name || null } : p));
+    if (target.id && passcode) {
+      try {
+        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, sponsor_id: sponsorId || null }) });
+      } catch {}
     }
   };
 
@@ -820,8 +835,8 @@ export default function BoilOnTheBend() {
           <div className="rtools" style={{justifyContent:"space-between"}}>
             <div className="searchbox"><Search size={16} color="var(--inkSoft)" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, phone…" /></div>
             <button className="org-btn" style={{display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",fontWeight:700,fontSize:13,padding:"8px 14px",borderRadius:9,cursor:"pointer",border:"1.5px solid #2d5a42",background:"transparent",color:"#2d5a42"}} onClick={() => {
-              const hdr = ["Bidder #","First Name","Last Name","Full Name","Ranch / Company","Email","Phone","Party Size","Status","Source","Amount Paid","Checked In"];
-              const rows = roster.map((p) => { const parts = (p.name||"").trim().split(/\s+/); const first = parts[0]||""; const last = parts.slice(1).join(" ")||""; return [p.bidderNumber||"", first, last, p.name||"", p.ranch||"", p.email||"", p.phone||"", p.party||1, p.status||"", p.source||"", p.amount||0, p.checkedIn?"Yes":"No"]; });
+              const hdr = ["Bidder #","First Name","Last Name","Full Name","Ranch / Company","Sponsor","Email","Phone","Party Size","Status","Source","Amount Paid","Checked In"];
+              const rows = roster.map((p) => { const parts = (p.name||"").trim().split(/\s+/); const first = parts[0]||""; const last = parts.slice(1).join(" ")||""; return [p.bidderNumber||"", first, last, p.name||"", p.ranch||"", p.sponsorName||"", p.email||"", p.phone||"", p.party||1, p.status||"", p.source||"", p.amount||0, p.checkedIn?"Yes":"No"]; });
               downloadCsv("registrants-2026.csv",[hdr,...rows]);
             }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -830,7 +845,7 @@ export default function BoilOnTheBend() {
           </div>
 
           <table className="tbl">
-            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
+            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Sponsor</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
                 const idx = roster.indexOf(p);
@@ -843,6 +858,14 @@ export default function BoilOnTheBend() {
                     <td style={{ fontWeight: 700 }}>{first}</td>
                     <td style={{ fontWeight: 700 }}>{last}</td>
                     <td style={{ color: "var(--inkSoft)" }}>{ranch}</td>
+                    <td>
+                      <select style={{ fontFamily: "inherit", fontSize: 12.5, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, background: "#fff", color: "var(--ink)", minWidth: 130 }}
+                        value={p.sponsorId || ""}
+                        onChange={(e) => saveSponsor(idx, e.target.value || null)}>
+                        <option value="">— None —</option>
+                        {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </td>
                     <td style={{ color: "var(--inkSoft)", fontSize: 12.5 }}>{p.email}</td>
                     <td><input style={inpStyle} value={p.phone || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x, xi) => xi === idx ? { ...x, phone: e.target.value } : x))} onBlur={(e) => savePhone(idx, e.target.value)} /></td>
                     <td>{p.party || 1}</td>
@@ -852,7 +875,7 @@ export default function BoilOnTheBend() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={10} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
             </tbody>
           </table>
         </div>

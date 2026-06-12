@@ -31,20 +31,26 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
-      const r = await fetch(`${base}?event_id=eq.${EVENT_ID}&order=created_at.desc`, { headers });
+      // Fetch registrants with sponsor name via PostgREST resource embedding
+      const r = await fetch(`${base}?event_id=eq.${EVENT_ID}&order=created_at.desc&select=*,sponsors(id,name)`, { headers });
       const data = await r.json();
-      // Coalesce ranch from notes for records imported before the ranch column existed
-      const rows = Array.isArray(data) ? data.map((row) => ({ ...row, ranch: row.ranch || row.notes || null })) : data;
+      // Coalesce ranch from notes; flatten sponsor name
+      const rows = Array.isArray(data) ? data.map((row) => ({
+        ...row,
+        ranch: row.ranch || row.notes || null,
+        sponsor_name: row.sponsors?.name || null,
+      })) : data;
       return res.status(r.ok ? 200 : 500).json(rows);
     }
 
     if (req.method === "PATCH") {
-      const { id, checked_in, bidder_number, phone, ...rest } = req.body || {};
+      const { id, checked_in, bidder_number, phone, sponsor_id, ...rest } = req.body || {};
       if (!id) return res.status(400).json({ error: "Missing id" });
       const patch = {};
       if ("checked_in" in (req.body || {})) patch.checked_in = !!checked_in;
       if ("bidder_number" in (req.body || {})) patch.bidder_number = bidder_number ?? null;
       if ("phone" in (req.body || {})) patch.phone = phone ?? null;
+      if ("sponsor_id" in (req.body || {})) patch.sponsor_id = sponsor_id ?? null;
       const r = await fetch(`${base}?id=eq.${id}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=minimal" },
