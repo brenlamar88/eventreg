@@ -97,6 +97,8 @@ const SAMPLE_ROSTER = [
 ];
 
 const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function csvEsc(v) { const s = v == null ? "" : String(v); return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s; }
+function downloadCsv(filename, rows) { const csv = rows.map((r) => r.map(csvEsc).join(",")).join("\r\n"); const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
 const blankAtt = () => ({ firstName: "", lastName: "", email: "", phone: "", ranch: "", notes: "" });
 const splitName = (name) => { const parts = (name || "").trim().split(/\s+/); return { first: parts[0] || "", last: parts.slice(1).join(" ") || "" }; };
 
@@ -815,7 +817,17 @@ export default function BoilOnTheBend() {
             </div>
           </div>
 
-          <div className="rtools"><div className="searchbox"><Search size={16} color="var(--inkSoft)" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, phone…" /></div></div>
+          <div className="rtools" style={{justifyContent:"space-between"}}>
+            <div className="searchbox"><Search size={16} color="var(--inkSoft)" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, phone…" /></div>
+            <button className="org-btn" style={{display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",fontWeight:700,fontSize:13,padding:"8px 14px",borderRadius:9,cursor:"pointer",border:"1.5px solid #2d5a42",background:"transparent",color:"#2d5a42"}} onClick={() => {
+              const hdr = ["Bidder #","First Name","Last Name","Full Name","Ranch / Company","Email","Phone","Party Size","Status","Source","Amount Paid","Checked In"];
+              const rows = roster.map((p) => { const parts = (p.name||"").trim().split(/\s+/); const first = parts[0]||""; const last = parts.slice(1).join(" ")||""; return [p.bidderNumber||"", first, last, p.name||"", p.ranch||"", p.email||"", p.phone||"", p.party||1, p.status||"", p.source||"", p.amount||0, p.checkedIn?"Yes":"No"]; });
+              downloadCsv("registrants-2026.csv",[hdr,...rows]);
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
+            </button>
+          </div>
 
           <table className="tbl">
             <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
