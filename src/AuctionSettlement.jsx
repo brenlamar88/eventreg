@@ -3,6 +3,7 @@ import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
   CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download,
 } from "lucide-react";
+import OrganizerNav from "./OrganizerNav.jsx";
 
 /* ============================================================================
    BUSINESS RULES
@@ -370,7 +371,7 @@ export default function AuctionSettlement() {
   const dotColor = db === "live" ? "var(--ok)" : db === "offline" ? "var(--warn)" : "#9DB3A8";
 
   return (
-    <div className="ewa"><Styles />
+    <div className="ewa"><Styles /><OrganizerNav />
       <datalist id="people-list">{people.map((p) => <option key={p.name} value={p.bidderNo ? `#${p.bidderNo} - ${p.name}` : p.name} />)}</datalist>
       <div className="head"><div className="wrap head-in">
         <div className="eyebrow">Exotic Wildlife Association · 2026 Annual Membership Meeting</div>

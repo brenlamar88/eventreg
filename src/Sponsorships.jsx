@@ -3,6 +3,7 @@ import {
   Plus, Trash2, Settings, Database, AlertTriangle, Check, X,
   Pencil, DollarSign, Users, Image, ChevronDown, ChevronUp, Download,
 } from "lucide-react";
+import OrganizerNav from "./OrganizerNav.jsx";
 
 const TIERS = [
   { name: "Presenting",  amount: 15000, color: "#7B61FF" },
@@ -230,7 +231,7 @@ export default function Sponsorships() {
   }, [sponsors]);
 
   return (
-    <div className="spo"><Styles />
+    <div className="spo"><Styles /><OrganizerNav />
       <div className="head"><div className="wrap head-in">
         <div className="eyebrow">Exotic Wildlife Association · 2026 Annual Membership Meeting</div>
         <h1 className="serif">Sponsorship Management</h1>
