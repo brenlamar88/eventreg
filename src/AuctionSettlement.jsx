@@ -146,7 +146,7 @@ const Styles = () => (
     @media print {
       @page { margin: 0; }
       body { margin: 15mm; }
-      .head,.bar,.settings,.addcard,.btn,.OrganizerNav,nav{display:none !important;}
+      .head,.bar,.settings,.addcard,.btn,.OrganizerNav,nav,.hint{display:none !important;}
       .ewa{background:#fff;}
     }
   `}</style>
