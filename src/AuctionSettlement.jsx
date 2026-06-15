@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import * as XLSX from "xlsx";
 import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
   CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download,
@@ -161,6 +162,7 @@ export default function AuctionSettlement() {
   const [db, setDb] = useState("idle");      // idle | loading | live | offline
   const [msg, setMsg] = useState("");
   const [regLoading, setRegLoading] = useState(false);
+  const [xlsxLoading, setXlsxLoading] = useState(false);
   const blankForm = { lotNo: "", description: "", category: "Elite Registry", consignorName: "", consignorRanch: "", buyerName: "", buyerRanch: "", amount: "", donated: false };
   const [form, setForm] = useState(blankForm);
   const [consignorSel, setConsignorSel] = useState("");
@@ -671,12 +673,72 @@ export default function AuctionSettlement() {
             setRegLoading(false);
           };
 
-          const Card = ({title, desc, onClick, loading}) => (
+          const exportAllData = async () => {
+            setXlsxLoading(true);
+            try {
+              const [regRes, sponsorRes] = await Promise.all([
+                fetch("/api/registrants", { headers: hdr() }),
+                fetch("/api/sponsors", { headers: hdr() }),
+              ]);
+              const regData = regRes.ok ? await regRes.json() : [];
+              const sponsorData = sponsorRes.ok ? await sponsorRes.json() : [];
+
+              const wb = XLSX.utils.book_new();
+
+              // Sheet 1: Registrants
+              const regHdr = ["Bidder #","Name","Email","Phone","Ranch / Company","Sponsor","Party Size","Status","Source","Amount Paid","Checked In","Date"];
+              const regRows = (Array.isArray(regData)?regData:[]).map((x)=>[
+                x.bidder_number||"", x.name||"", x.email||"", x.phone||"",
+                x.ranch||x.notes||"", x.sponsor_name||"", x.party||1, x.status||"", x.source||"",
+                x.amount||0, x.checked_in?"Yes":"No", (x.created_at||"").slice(0,10)
+              ]);
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([regHdr,...regRows]), "Registrants");
+
+              // Sheet 2: All Lots
+              const lotHdr = ["Lot #","Description","Category","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
+              const lotRows = [...lots].sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
+                const c=calc(l,eventFee);
+                return [l.lotNo,l.description,l.category,l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,c.fee,c.commission,c.net,l.amountPaid||0,Math.max(0,l.amount-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+              });
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([lotHdr,...lotRows]), "All Lots");
+
+              // Sheet 3: Grand Auction
+              const grandRows = lots.filter(l=>l.category==="Grand Auction").sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
+                const c=calc(l,eventFee);
+                return [l.lotNo,l.description,l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,c.fee,l.amountPaid||0,Math.max(0,l.amount-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+              });
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Lot #","Description","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"],...grandRows]), "Grand Auction");
+
+              // Sheet 4: Buyers Summary
+              const buyerMap = {};
+              lots.forEach((l)=>{ if(!l.buyerName) return; (buyerMap[l.buyerName]||=[]).push(l); });
+              const buyerRows = Object.entries(buyerMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,ls])=>{
+                const total=ls.reduce((a,l)=>a+l.amount,0);
+                const paid=ls.reduce((a,l)=>a+(l.amountPaid||0),0);
+                return [name,findBidder(name),findRanch(name),ls.length,total,paid,Math.max(0,total-paid)];
+              });
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Buyer","Bidder #","Ranch","Lots Purchased","Total Amount","Amount Paid","Balance Due"],...buyerRows]), "Buyers");
+
+              // Sheet 5: Consignors Summary
+              const consignorRows = byConsignor.map(({name,ls,t})=>[name,ls[0]?.consignorRanch||"",ls.length,t.lotTotal,t.fees,t.commission,t.net]);
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Consignor","Ranch","Lots","Gross","Lot Fees","Commission","Net Due"],...consignorRows]), "Consignors");
+
+              // Sheet 6: Sponsors
+              const sponsorHdr = ["Name","Tier","Amount","Status","Contact","Email","Phone","Notes"];
+              const sponsorRows2 = (Array.isArray(sponsorData)?sponsorData:[]).map((s)=>[s.name||"",s.tier||"",s.amount||0,s.status||"",s.contact_name||"",s.contact_email||"",s.contact_phone||"",s.notes||""]);
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([sponsorHdr,...sponsorRows2]), "Sponsors");
+
+              XLSX.writeFile(wb, "EWA-2026-AllData.xlsx");
+            } catch(e){ alert("Export failed: "+e.message); }
+            setXlsxLoading(false);
+          };
+
+          const Card = ({title, desc, onClick, loading, csv=true}) => (
             <div style={{background:"var(--paper)",border:"1.5px solid var(--line)",borderRadius:14,padding:"22px 24px",display:"flex",flexDirection:"column",gap:10}}>
               <div style={{fontFamily:"'Fraunces',serif",fontSize:17,fontWeight:600}}>{title}</div>
               <div style={{fontSize:13,color:"var(--inkSoft)",flex:1}}>{desc}</div>
               <button className="btn" onClick={onClick} disabled={loading} style={{alignSelf:"flex-start"}}>
-                <Download size={15}/> {loading?"Preparing…":"Download CSV"}
+                <Download size={15}/> {loading?"Preparing…":csv?"Download CSV":"Download Excel"}
               </button>
             </div>
           );
@@ -684,8 +746,12 @@ export default function AuctionSettlement() {
           return (<>
             <div style={{marginBottom:16}}>
               <div className="addhdr" style={{fontFamily:"'Fraunces',serif",fontSize:20,fontWeight:600,marginBottom:6}}><Download size={18}/> Export Reports</div>
-              <div style={{fontSize:13,color:"var(--inkSoft)"}}>All CSV files open directly in Excel. Connect with your organizer passcode first to export live data.</div>
+              <div style={{fontSize:13,color:"var(--inkSoft)"}}>All files open directly in Excel. Connect with your organizer passcode first to export live data.</div>
             </div>
+            <div style={{marginBottom:20}}>
+              <Card title="Full Data Export (Excel)" desc="Single Excel workbook with all data: Registrants, All Lots, Grand Auction, Buyers, Consignors, and Sponsors — one sheet each." onClick={exportAllData} loading={xlsxLoading} csv={false} />
+            </div>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--inkSoft)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.05em"}}>Individual CSV Exports</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
               <Card title="All Lots" desc="Every lot with consignor, buyer, sale amount, fees, commission, net, payment status, and delivery info." onClick={exportAllLots} />
               <Card title="Buyer Summary" desc="One row per buyer showing bidder number, ranch, lots purchased, total amount, amount paid, and balance due." onClick={exportBuyerSummary} />
