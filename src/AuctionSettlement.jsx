@@ -5,6 +5,9 @@ import {
   CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download,
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
+import { DEMO_LOTS, DEMO_PEOPLE, DEMO_REGISTRANTS, DEMO_SPONSORS, DEMO_LOT_FEE } from "./demoData.js";
+
+const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 
 /* ============================================================================
    BUSINESS RULES
@@ -181,8 +184,19 @@ export default function AuctionSettlement() {
   const findBidder = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).bidderNo || "";
   const findEmail  = (name) => (people.find((p) => p.name.toLowerCase() === name.toLowerCase()) || {}).email    || "";
 
+  // Boot demo mode immediately — no passcode needed
+  useEffect(() => {
+    if (!IS_DEMO) return;
+    setLots(DEMO_LOTS);
+    setPeople(DEMO_PEOPLE);
+    setEventFee(DEMO_LOT_FEE);
+    setDb("live");
+    setMsg("Demo mode — sample data only. No real data is shown or saved.");
+  }, []);
+
   // Mark lot paid when Stripe redirects back with ?lot_paid=<id>
   useEffect(() => {
+    if (IS_DEMO) return;
     const params = new URLSearchParams(window.location.search);
     const paidId = params.get("lot_paid");
     if (paidId) {
@@ -237,7 +251,7 @@ export default function AuctionSettlement() {
       consignor: display(editForm.consignorName.trim(), editForm.consignorRanch.trim()),
     };
     setLots((p) => p.map((l) => l.id === editId ? { ...l, ...patch } : l));
-    if (connected && typeof editId === "string" && !editId.startsWith("tmp-")) {
+    if (!IS_DEMO && connected && typeof editId === "string" && !editId.startsWith("tmp-")) {
       try {
         await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
       } catch {}
@@ -312,7 +326,7 @@ export default function AuctionSettlement() {
     rememberPerson(base.consignorName, base.consignorRanch);
     rememberPerson(base.buyerName, base.buyerRanch);
     setForm(blankForm);
-    if (connected) {
+    if (!IS_DEMO && connected) {
       const c = calc(base, eventFee);
       try {
         const r = await fetch("/api/lots", { method: "POST", headers: hdr(), body: JSON.stringify({ ...base, commission: c.commission, net: c.net, lotFee: null }) });
@@ -323,7 +337,7 @@ export default function AuctionSettlement() {
 
   const setLot = async (id, patch) => {
     setLots((p) => p.map((l) => l.id === id ? { ...l, ...patch } : l));
-    if (connected && typeof id === "string" && !id.startsWith("tmp-")) {
+    if (!IS_DEMO && connected && typeof id === "string" && !id.startsWith("tmp-")) {
       const dbPatch = {};
       if ("delivered" in patch) dbPatch.delivered = patch.delivered;
       if ("checkNo" in patch) dbPatch.check_no = patch.checkNo || null;
@@ -339,7 +353,7 @@ export default function AuctionSettlement() {
   };
   const delLot = async (id) => {
     setLots((p) => p.filter((l) => l.id !== id));
-    if (connected && typeof id === "string" && !id.startsWith("tmp-")) { try { await fetch(`/api/lots?id=${id}`, { method: "DELETE", headers: hdr() }); } catch {} }
+    if (!IS_DEMO && connected && typeof id === "string" && !id.startsWith("tmp-")) { try { await fetch(`/api/lots?id=${id}`, { method: "DELETE", headers: hdr() }); } catch {} }
   };
 
   const grand = useMemo(() => lots.reduce((a, l) => { if (!l.donated) { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; } return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }), [lots, eventFee]);
@@ -394,7 +408,12 @@ export default function AuctionSettlement() {
       </div></div>
 
       <div className="wrap panel">
-        <div className="settings">
+        {IS_DEMO && (
+          <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
+            <AlertTriangle size={16}/> DEMO MODE — Sample data only. No real data is shown or saved. All features are fully functional.
+          </div>
+        )}
+        {!IS_DEMO && <div className="settings">
           <label><Settings size={14} /> Event lot fee</label>
           <input className="feein" value={eventFee} inputMode="decimal" onChange={(e) => setEventFee(e.target.value.replace(/[^\d.]/g, ""))} onBlur={saveFee} />
           <span className="tiers">≤ $5,000 → 11% · $5,001–$9,999 → 10% · ≥ $10,000 → 9%</span>
@@ -403,8 +422,8 @@ export default function AuctionSettlement() {
             <input className="pwd" type="password" placeholder="Organizer passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} />
             <button className="btn" onClick={connect} disabled={db === "loading"}><Database size={15} /> {db === "loading" ? "Connecting…" : "Connect"}</button>
           </div>
-        </div>
-        {msg && <div className="hint" style={{ marginTop: -10, marginBottom: 16, color: db === "offline" ? "var(--warn)" : "var(--ok)" }}>{db === "offline" && <AlertTriangle size={14} />}{msg}</div>}
+        </div>}
+        {!IS_DEMO && msg && <div className="hint" style={{ marginTop: -10, marginBottom: 16, color: db === "offline" ? "var(--warn)" : "var(--ok)" }}>{db === "offline" && <AlertTriangle size={14} />}{msg}</div>}
 
         {tab === "payments" && (<>
           <div className="cards">
@@ -661,8 +680,7 @@ export default function AuctionSettlement() {
           const exportRegistrations = async () => {
             setRegLoading(true);
             try {
-              const r = await fetch("/api/registrants", { headers: hdr() });
-              const data = r.ok ? await r.json() : [];
+              const data = IS_DEMO ? DEMO_REGISTRANTS : await (await fetch("/api/registrants", { headers: hdr() })).json();
               const rows = (Array.isArray(data)?data:[]).map((x)=>[
                 x.bidder_number||"", x.name||"", x.email||"", x.phone||"",
                 x.ranch||x.notes||"", x.party||1, x.status||"", x.source||"",
@@ -676,12 +694,14 @@ export default function AuctionSettlement() {
           const exportAllData = async () => {
             setXlsxLoading(true);
             try {
-              const [regRes, sponsorRes] = await Promise.all([
-                fetch("/api/registrants", { headers: hdr() }),
-                fetch("/api/sponsors", { headers: hdr() }),
-              ]);
-              const regData = regRes.ok ? await regRes.json() : [];
-              const sponsorData = sponsorRes.ok ? await sponsorRes.json() : [];
+              let regData, sponsorData;
+              if (IS_DEMO) {
+                regData = DEMO_REGISTRANTS; sponsorData = DEMO_SPONSORS;
+              } else {
+                const [regRes, sponsorRes] = await Promise.all([fetch("/api/registrants", { headers: hdr() }), fetch("/api/sponsors", { headers: hdr() })]);
+                regData = regRes.ok ? await regRes.json() : [];
+                sponsorData = sponsorRes.ok ? await sponsorRes.json() : [];
+              }
 
               const wb = XLSX.utils.book_new();
 
