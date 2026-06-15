@@ -6,6 +6,9 @@ import {
   ScanLine, CreditCard, FileText,
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
+import { DEMO_REGISTRANTS, DEMO_SPONSORS } from "./demoData.js";
+
+const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 
 /* ============================================================================
    1. EVENT CONFIG
@@ -348,8 +351,25 @@ export default function BoilOnTheBend() {
     return items;
   }, [qty, ticketsTotal, donation]);
 
+  /* boot demo mode — load sample registrants + sponsors, skip passcode */
+  useEffect(() => {
+    if (!IS_DEMO) return;
+    const mapped = DEMO_REGISTRANTS.map((x) => ({
+      id: x.id, name: x.name, email: x.email, phone: x.phone, party: x.party,
+      source: x.source, status: x.status, amount: x.amount,
+      checkedIn: x.checked_in, date: x.created_at,
+      notes: null, ranch: x.ranch, bidderNumber: x.bidder_number,
+      sponsorId: null, sponsorName: x.sponsor_name || null,
+    }));
+    setRoster(mapped);
+    setSponsors(DEMO_SPONSORS.map((s) => ({ id: s.id, name: s.name })));
+    setDbState("live");
+    setDbMsg("Demo mode — sample data only.");
+  }, []);
+
   /* handle Stripe redirect return (live mode) */
   useEffect(() => {
+    if (IS_DEMO) return;
     const p = new URLSearchParams(window.location.search);
     if (p.get("status") === "success") {
       if (p.get("walkin") === "1") {
@@ -370,7 +390,7 @@ export default function BoilOnTheBend() {
 
   // Auto-refresh roster every 20 s when connected so all devices stay in sync
   useEffect(() => {
-    if (dbState !== "live") return;
+    if (IS_DEMO || dbState !== "live") return;
     const id = setInterval(() => {
       fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } })
         .then((r) => r.ok ? r.json() : null)
@@ -804,7 +824,12 @@ export default function BoilOnTheBend() {
           <h2 className="section-t mrd-serif">{EVENT.name} — Registrants</h2>
           <p className="section-d">Live from Supabase (yellow-kite). Enter the organizer passcode to load the roster.</p>
 
-          <div className="dbbar">
+          {IS_DEMO && (
+            <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
+              <AlertTriangle size={16}/> DEMO MODE — Sample data only. No real data is shown or saved.
+            </div>
+          )}
+          {!IS_DEMO && <div className="dbbar">
             <Database size={17} color="var(--pine)" />
             <span className="dot" style={{ background: dotColor }} />
             <span style={{ fontSize: 13, fontWeight: 600 }}>{dbState === "live" ? "Connected" : dbState === "offline" ? "Offline (local)" : "Not loaded"}</span>
@@ -812,8 +837,8 @@ export default function BoilOnTheBend() {
             <button className="btn btn-p" style={{ padding: "11px 18px" }} onClick={loadRoster} disabled={dbState === "loading"}>
               <RefreshCw size={15} /> {dbState === "loading" ? "Loading…" : "Load roster"}
             </button>
-          </div>
-          {dbMsg && <p style={{ fontSize: 12.5, color: dbState === "offline" ? "var(--warn)" : "var(--ok)", margin: "-8px 0 18px", display: "flex", alignItems: "center", gap: 7 }}>{dbState === "offline" && <AlertTriangle size={14} />}{dbMsg}</p>}
+          </div>}
+          {!IS_DEMO && dbMsg && <p style={{ fontSize: 12.5, color: dbState === "offline" ? "var(--warn)" : "var(--ok)", margin: "-8px 0 18px", display: "flex", alignItems: "center", gap: 7 }}>{dbState === "offline" && <AlertTriangle size={14} />}{dbMsg}</p>}
 
           <div className="stats">
             <div className="stat"><div className="n">{roster.length}</div><div className="l">Registrations</div></div>

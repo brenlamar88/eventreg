@@ -1,9 +1,12 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Plus, Trash2, Settings, Database, AlertTriangle, Check, X,
   Pencil, DollarSign, Users, Image, ChevronDown, ChevronUp, Download,
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
+import { DEMO_SPONSORS } from "./demoData.js";
+
+const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 
 const TIERS = [
   { name: "Presenting",  amount: 15000, color: "#7B61FF" },
@@ -141,6 +144,12 @@ export default function Sponsorships() {
   const setF = (k, v) => setForm((p) => ({ ...p, [k]: v }));
   const dotColor = db === "live" ? "var(--ok)" : db === "offline" ? "var(--warn)" : "#9DB3A8";
 
+  useEffect(() => {
+    if (!IS_DEMO) return;
+    setSponsors(DEMO_SPONSORS.map((s) => ({ id: s.id, name: s.name, contactName: s.contact_name || "", contactEmail: s.contact_email || "", contactPhone: s.contact_phone || "", tier: s.tier, amountPledged: s.amount, amountPaid: s.status === "paid" ? s.amount : 0, paymentStatus: s.status === "paid" ? "Paid" : "Invoiced", benefits: "", logoReceived: false, notes: s.notes || "" })));
+    setDb("live");
+  }, []);
+
   const connect = async () => {
     setDb("loading"); setMsg("");
     try {
@@ -175,7 +184,7 @@ export default function Sponsorships() {
     };
     setSponsors((p) => [...p, ui]);
     setForm(blankForm);
-    if (connected) {
+    if (!IS_DEMO && connected) {
       try {
         const r = await fetch("/api/sponsors", { method: "POST", headers: hdr(), body: JSON.stringify(ui) });
         if (r.ok) { const row = await r.json(); setSponsors((p) => p.map((s) => s.id === ui.id ? { ...s, id: row.id } : s)); }
@@ -187,21 +196,21 @@ export default function Sponsorships() {
     const patch = editBuf[id] || {};
     setSponsors((p) => p.map((s) => s.id === id ? { ...s, ...patch } : s));
     setExpandId(null);
-    if (connected && !String(id).startsWith("tmp-")) {
+    if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
       try { await fetch("/api/sponsors", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...patch }) }); } catch {}
     }
   };
 
   const patchField = async (id, key, value) => {
     setSponsors((p) => p.map((s) => s.id === id ? { ...s, [key]: value } : s));
-    if (connected && !String(id).startsWith("tmp-")) {
+    if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
       try { await fetch("/api/sponsors", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, [key]: value }) }); } catch {}
     }
   };
 
   const delSponsor = async (id) => {
     setSponsors((p) => p.filter((s) => s.id !== id));
-    if (connected && !String(id).startsWith("tmp-")) {
+    if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
       try { await fetch(`/api/sponsors?id=${id}`, { method: "DELETE", headers: hdr() }); } catch {}
     }
   };
@@ -239,15 +248,20 @@ export default function Sponsorships() {
       </div></div>
 
       <div className="wrap panel">
+        {IS_DEMO && (
+          <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
+            <AlertTriangle size={16}/> DEMO MODE — Sample data only. No real data is shown or saved. All features are fully functional.
+          </div>
+        )}
         {/* ---- connection bar ---- */}
-        <div className="settings">
+        {!IS_DEMO && <div className="settings">
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 12.5, fontWeight: 600 }}><span className="dot" style={{ background: dotColor }} />{db === "live" ? "Connected" : db === "offline" ? "Offline" : "Not connected"}</span>
             <input className="pwd" type="password" placeholder="Organizer passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && connect()} />
             <button className="btn" onClick={connect} disabled={db === "loading"}><Database size={15} />{db === "loading" ? "Connecting…" : "Connect"}</button>
           </div>
-        </div>
-        {msg && <div className="hint" style={{ marginTop: -10, marginBottom: 16, color: db === "offline" ? "var(--warn)" : "var(--ok)" }}>{db === "offline" && <AlertTriangle size={14} />}{msg}</div>}
+        </div>}
+        {!IS_DEMO && msg && <div className="hint" style={{ marginTop: -10, marginBottom: 16, color: db === "offline" ? "var(--warn)" : "var(--ok)" }}>{db === "offline" && <AlertTriangle size={14} />}{msg}</div>}
 
         {/* ---- KPIs ---- */}
         <div className="cards">
