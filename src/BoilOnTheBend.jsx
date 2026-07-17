@@ -6,6 +6,7 @@ import {
   ScanLine, CreditCard, FileText,
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
+import TicketQR from "./TicketQR.jsx";
 import { DEMO_REGISTRANTS, DEMO_SPONSORS } from "./demoData.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
@@ -300,17 +301,116 @@ const Styles = () => (
   `}</style>
 );
 
-function CheckinQR({ value, size = 116 }) {
-  const grid = useMemo(() => {
-    const cells = 25; let seed = 7;
-    for (let i = 0; i < value.length; i++) seed = (seed * 31 + value.charCodeAt(i)) >>> 0;
-    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
-    const fin = (r, c) => [[0, 0], [0, cells - 7], [cells - 7, 0]].some(([zr, zc]) => r >= zr && r < zr + 7 && c >= zc && c < zc + 7);
-    const m = []; for (let r = 0; r < cells; r++) { const row = []; for (let c = 0; c < cells; c++) row.push(!fin(r, c) && rnd() > 0.52); m.push(row); } return m;
-  }, [value]);
-  const cells = 25, u = size / cells;
-  const F = (x, y) => (<g key={`f${x}${y}`}><rect x={x * u} y={y * u} width={7 * u} height={7 * u} fill="#0C2A20" /><rect x={(x + 1) * u} y={(y + 1) * u} width={5 * u} height={5 * u} fill="#fff" /><rect x={(x + 2) * u} y={(y + 2) * u} width={3 * u} height={3 * u} fill="#0C2A20" /></g>);
-  return (<svg width={size} height={size} style={{ background: "#fff", borderRadius: 10, padding: 6 }}>{grid.map((row, r) => row.map((on, c) => on ? <rect key={`${r}-${c}`} x={c * u} y={r * u} width={u} height={u} fill="#0C2A20" /> : null))}{F(0, 0)}{F(cells - 7, 0)}{F(0, cells - 7)}</svg>);
+/* Mint a ticket token in the browser (simulated + cash walk-in paths — the
+   Stripe path's token is minted server-side by the webhook). Same shape as the
+   server's: 128 random bits, base64url. */
+function mintTicketToken() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let bin = "";
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/* Camera scanner for the Door view. Decodes ticket QR codes with the device
+   camera (@zxing/browser over getUserMedia — works in Safari on iPad) and
+   redeems each token against /api/scan, which checks in atomically and
+   classifies accepted / duplicate / invalid. Manual entry is the fallback for
+   damaged codes or devices without a camera. */
+function ScanModal({ passcode, onClose, onCheckedIn }) {
+  const videoRef = React.useRef(null);
+  const busyRef = React.useRef(false);
+  const lastRef = React.useRef({ token: "", at: 0 });
+  const [status, setStatus] = useState(null);
+  const [cameraError, setCameraError] = useState("");
+  const [manual, setManual] = useState("");
+
+  const redeem = async (token) => {
+    token = (token || "").trim();
+    if (!token) return;
+    // Debounce: the camera decodes the same code many times per second, and a
+    // request in flight must finish before the next fires.
+    const now = Date.now();
+    if (busyRef.current) return;
+    if (lastRef.current.token === token && now - lastRef.current.at < 4000) return;
+    busyRef.current = true;
+    lastRef.current = { token, at: now };
+    try {
+      const r = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-organizer-key": passcode },
+        body: JSON.stringify({ token, device: "door" }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || `Scan failed (${r.status})`);
+      setStatus(data);
+      if (data.result === "accepted") onCheckedIn?.(data.registrant);
+    } catch (err) {
+      setStatus({ result: "error", message: err.message });
+    } finally {
+      busyRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    let controls = null;
+    let cancelled = false;
+    import("@zxing/browser")
+      .then(({ BrowserQRCodeReader }) => {
+        if (cancelled) return;
+        const reader = new BrowserQRCodeReader();
+        return reader
+          .decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+            if (result) redeem(result.getText());
+          })
+          .then((c) => { controls = c; if (cancelled) c.stop(); });
+      })
+      .catch((err) => setCameraError(err?.message || "Camera unavailable — use manual entry below."));
+    return () => { cancelled = true; if (controls) controls.stop(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const tone = status?.result === "accepted" ? { bg: "#e4f0e9", fg: "var(--ok)", bd: "#b8dcc6" }
+    : status?.result === "duplicate" ? { bg: "#f6ece0", fg: "var(--warn)", bd: "#e6cfa8" }
+    : { bg: "#fdf0ec", fg: "#b4471f", bd: "#efc4b3" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(12,42,32,.66)", zIndex: 60, display: "grid", placeItems: "center", padding: 18 }} onClick={onClose}>
+      <div style={{ background: "var(--paper)", borderRadius: 18, border: "1.5px solid var(--line)", width: "min(440px,100%)", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", background: "var(--pine)", color: "#EAF1EC" }}>
+          <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}><ScanLine size={17} /> Scan tickets</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#EAF1EC", fontFamily: "inherit", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Done</button>
+        </div>
+        <div style={{ padding: 16 }}>
+          {cameraError ? (
+            <div style={{ fontSize: 13.5, color: "var(--warn)", background: "#f6ece0", border: "1.5px solid #e6cfa8", borderRadius: 12, padding: "12px 14px" }}>
+              <AlertTriangle size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{cameraError}
+            </div>
+          ) : (
+            <video ref={videoRef} style={{ width: "100%", borderRadius: 12, background: "#0C2A20", aspectRatio: "4/3", objectFit: "cover" }} muted playsInline />
+          )}
+
+          {status && (
+            <div style={{ marginTop: 12, background: tone.bg, color: tone.fg, border: `1.5px solid ${tone.bd}`, borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14 }}>
+              {status.result === "accepted" && <><CheckCircle2 size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{status.registrant?.name || "Guest"} — party of {status.registrant?.party || 1} checked in!</>}
+              {status.result === "duplicate" && <><AlertTriangle size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />Already checked in: {status.registrant?.name || "Guest"}{status.registrant?.checked_in_at ? ` at ${new Date(status.registrant.checked_in_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</>}
+              {status.result === "invalid" && <><AlertTriangle size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />Ticket not recognized.</>}
+              {status.result === "error" && <><AlertTriangle size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{status.message}</>}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <input
+              className="inp" style={{ flex: 1 }} placeholder="Or type the ticket code…"
+              value={manual} onChange={(e) => setManual(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && manual.trim()) { redeem(manual); setManual(""); } }}
+            />
+            <button className="btn btn-p" style={{ padding: "11px 16px" }} onClick={() => { if (manual.trim()) { redeem(manual); setManual(""); } }}>Check in</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ============================================================================ */
@@ -323,6 +423,13 @@ export default function BoilOnTheBend() {
   const [pay, setPay] = useState({ name: "", card: "", exp: "", cvc: "" });
   const [errors, setErrors] = useState({});
   const [confCode] = useState(() => "BOTB-" + Math.random().toString(36).slice(2, 7).toUpperCase());
+  // The real ticket shown on the confirmation screen: { token, name, party }.
+  // Simulated/cash paths set it at mint time; the Stripe path fills it by
+  // polling /api/ticket with the session_id from the success redirect.
+  const [ticket, setTicket] = useState(null);
+  // Which wallet buttons to show — the endpoints are env-gated, so probe once
+  // on the confirmation screen and only render buttons that will work.
+  const [walletAvail, setWalletAvail] = useState({ apple: false, google: false });
 
   const [roster, setRoster] = useState(SAMPLE_ROSTER);
   const [sponsors, setSponsors] = useState([]);
@@ -341,6 +448,7 @@ export default function BoilOnTheBend() {
   const [walkInMsg, setWalkInMsg] = useState("");
   const [walkInLoading, setWalkInLoading] = useState(false);
   const [walkIns, setWalkIns] = useState([]);
+  const [scanOpen, setScanOpen] = useState(false);
 
   const qty = attendees.length;
   const ticketsTotal = qty * TICKET.price;
@@ -383,10 +491,36 @@ export default function BoilOnTheBend() {
         }
       } else {
         setStep(3);
+        // The webhook mints the ticket; it usually lands within a second or
+        // two of the redirect. Poll briefly until it's there.
+        const sid = p.get("session_id");
+        if (sid) {
+          let tries = 0;
+          const poll = async () => {
+            tries++;
+            try {
+              const r = await fetch(`/api/ticket?session_id=${encodeURIComponent(sid)}`);
+              if (r.ok) {
+                const t = await r.json();
+                setTicket({ token: t.ticket_token, name: t.name, party: t.party });
+                return;
+              }
+            } catch { /* retry below */ }
+            if (tries < 12) setTimeout(poll, 2500);
+          };
+          poll();
+        }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Probe the env-gated wallet endpoints once we reach the confirmation screen
+  useEffect(() => {
+    if (IS_DEMO || step !== 3) return;
+    fetch("/api/wallet-pass?probe=1").then((r) => setWalletAvail((w) => ({ ...w, apple: r.ok }))).catch(() => {});
+    fetch("/api/google-wallet?probe=1").then((r) => setWalletAvail((w) => ({ ...w, google: r.ok }))).catch(() => {});
+  }, [step]);
 
   // Auto-refresh roster every 20 s when connected so all devices stay in sync
   useEffect(() => {
@@ -424,13 +558,15 @@ export default function BoilOnTheBend() {
   const completeRegistration = async () => {
     const a = attendees[0];
     const bidderNo = String(await nextBidderNumber());
+    const token = mintTicketToken();
     const row = {
       name: `${a.firstName} ${a.lastName}`.trim(), email: a.email, phone: a.phone,
       party: qty, source: "Online", status: "Paid", amount: total, notes: a.notes || null, ranch: a.ranch || null,
-      bidder_number: bidderNo,
+      bidder_number: bidderNo, ticket_token: token,
     };
     try { await dbInsert(row); } catch (err) { console.warn("DB write skipped:", err.message); }
     setRoster((r) => [{ ...row, checkedIn: false, date: new Date().toISOString().slice(0, 10), bidderNumber: bidderNo }, ...r]);
+    setTicket({ token, name: row.name, party: qty });
     setStep(3); window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -592,6 +728,7 @@ export default function BoilOnTheBend() {
         notes: walkInForm.ranch.trim() || null,
         party: walkInForm.party || 1, source: "Walk-in",
         status: "Paid", amount: walkInTotal, checked_in: true, bidder_number: bidderNo,
+        ticket_token: mintTicketToken(),
       };
       try { await dbInsert(row); } catch (err) { /* offline fallback */ }
       const uiRow = { ...row, checkedIn: true, date: new Date().toISOString().slice(0, 10), id: `wi-${Date.now()}`, bidderNumber: bidderNo };
@@ -668,7 +805,21 @@ export default function BoilOnTheBend() {
                       autoFocus
                     />
                   </div>
+                  <button className="btn btn-p" style={{ padding: "12px 20px" }} onClick={() => setScanOpen(true)}>
+                    <ScanLine size={17} /> Scan tickets
+                  </button>
                 </div>
+                {scanOpen && (
+                  <ScanModal
+                    passcode={passcode}
+                    onClose={() => { setScanOpen(false); loadRoster(passcode); }}
+                    onCheckedIn={(reg) => {
+                      // Reflect the scan in the local roster immediately (by id,
+                      // not index — the 20 s poll may reorder rows underneath us)
+                      setRoster((r) => r.map((p) => (p.id === reg?.id ? { ...p, checkedIn: true } : p)));
+                    }}
+                  />
+                )}
 
                 {doorSearch.trim().length === 0 && (
                   <p style={{ fontSize: 13, color: "var(--inkSoft)", marginTop: 8 }}>Type at least 2 characters to search the roster.</p>
@@ -927,21 +1078,34 @@ export default function BoilOnTheBend() {
   /* ---------- CONFIRMATION ---------- */
   if (step === 3) {
     const a = attendees[0];
+    const token = ticket?.token || null;
     return (
       <div className="mrd"><Styles /><UtilBar />
         <div className="wrap"><div className="conf anim">
           <div className="badge"><Check size={36} strokeWidth={3} /></div>
           <h2 className="mrd-serif">You're in!</h2>
-          <p>A confirmation is headed to <b>{a.email || "your inbox"}</b>. Show this code at the door.</p>
+          <p>A confirmation is headed to <b>{a.email || "your inbox"}</b>. This QR code is your ticket — show it at the door.</p>
           <div className="ticket">
-            <div className="stub"><CheckinQR value={confCode} /><div className="conf-code">{confCode}</div></div>
+            <div className="stub">
+              {token
+                ? <TicketQR value={token} />
+                : <div style={{ width: 116, height: 116, borderRadius: 10, background: "rgba(255,255,255,.12)", display: "grid", placeItems: "center", fontSize: 11.5, color: "#A9C0B5", textAlign: "center", padding: 10 }}>Preparing your ticket…</div>}
+              <div className="conf-code">{confCode}</div>
+            </div>
             <div className="body">
               <div className="row"><span className="k">Event</span><span className="v">{EVENT.name}</span></div>
-              <div className="row"><span className="k">Name</span><span className="v">{`${a.firstName} ${a.lastName}`.trim() || "—"}</span></div>
-              <div className="row"><span className="k">Party of</span><span className="v">{qty}</span></div>
-              <div className="row"><span className="k">Total paid</span><span className="v">{money(total)}</span></div>
+              <div className="row"><span className="k">Name</span><span className="v">{ticket?.name || `${a.firstName} ${a.lastName}`.trim() || "—"}</span></div>
+              <div className="row"><span className="k">Party of</span><span className="v">{ticket?.party || qty}</span></div>
+              <div className="row"><span className="k">Total paid</span><span className="v">{total > 0 ? money(total) : "Paid"}</span></div>
             </div>
           </div>
+          {token && (
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
+              {walletAvail.apple && <a className="btn btn-p" style={{ textDecoration: "none" }} href={`/api/wallet-pass?token=${encodeURIComponent(token)}`}>Add to Apple Wallet</a>}
+              {walletAvail.google && <a className="btn btn-p" style={{ textDecoration: "none" }} href={`/api/google-wallet?token=${encodeURIComponent(token)}`}>Add to Google Wallet</a>}
+              <a className="btn btn-g" style={{ textDecoration: "none" }} href={`/?ticket=${encodeURIComponent(token)}`}>Open my ticket page</a>
+            </div>
+          )}
         </div></div>
       </div>
     );

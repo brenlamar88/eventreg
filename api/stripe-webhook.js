@@ -15,8 +15,17 @@
 //
 // NOTE: Stripe signature verification needs the RAW request body, so this
 // function reads the stream directly and never touches req.body.
+//
+// Idempotency: Stripe redelivers webhooks. The insert is an upsert keyed on
+// the unique stripe_session_id (db/phase-a.sql), so a redelivery is a no-op
+// instead of a duplicate paid registrant.
+//
+// Ticketing: every paid registrant is minted a ticket_token — an opaque
+// 128-bit base64url id. The QR code encodes this token; /api/scan redeems it
+// at the door; /api/ticket lets the success page retrieve it.
 // ---------------------------------------------------------------------------
 import Stripe from "stripe";
+import crypto from "node:crypto";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -46,7 +55,7 @@ export default async function handler(req, res) {
     // Lot payment — mark buyer_paid on the lot
     if (s.metadata?.type === "lot" && s.metadata?.lotId) {
       try {
-        await fetch(`${process.env.SUPABASE_URL}/rest/v1/lots?id=eq.${s.metadata.lotId}`, {
+        const r = await fetch(`${process.env.SUPABASE_URL}/rest/v1/lots?id=eq.${s.metadata.lotId}`, {
           method: "PATCH",
           headers: {
             apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -56,6 +65,7 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({ buyer_paid: true, amount_paid: (s.amount_total || 0) / 100 }),
         });
+        if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
       } catch (err) {
         console.error("Supabase lot patch (webhook) failed:", err);
         return res.status(500).json({ received: true, stored: false });
@@ -63,7 +73,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true });
     }
 
-    // Registration payment — insert new registrant
+    // Registration payment — upsert the paid registrant + mint their ticket
     const row = {
       event_id: s.metadata?.eventId || "boil85",
       name: s.metadata?.name || s.customer_details?.name || null,
@@ -75,20 +85,28 @@ export default async function handler(req, res) {
       amount: (s.amount_total || 0) / 100,
       stripe_session_id: s.id,
       checked_in: s.metadata?.checkedIn === "true",
+      ticket_token: crypto.randomBytes(16).toString("base64url"),
     };
     try {
-      await fetch(`${process.env.SUPABASE_URL}/rest/v1/registrants`, {
-        method: "POST",
-        headers: {
-          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify(row),
-      });
+      const r = await fetch(
+        `${process.env.SUPABASE_URL}/rest/v1/registrants?on_conflict=stripe_session_id`,
+        {
+          method: "POST",
+          headers: {
+            apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json",
+            // ignore-duplicates: a redelivered webhook leaves the original row
+            // (and its ticket_token) untouched instead of erroring or rewriting.
+            Prefer: "resolution=ignore-duplicates,return=minimal",
+          },
+          body: JSON.stringify(row),
+        }
+      );
+      if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
     } catch (err) {
-      console.error("Supabase insert (webhook) failed:", err);
+      console.error("Supabase upsert (webhook) failed:", err);
+      // 500 → Stripe retries; the upsert makes the retry safe.
       return res.status(500).json({ received: true, stored: false });
     }
   }
