@@ -70,6 +70,32 @@ ticket can never check in twice, even from two devices at once.
 Scans hit `POST /api/scan` (organizer passcode required). Results —
 accepted / duplicate / invalid — are logged to `ticket_scans`.
 
+### Door iPad stations (Phase B)
+
+Two locked, single-purpose station modes, launched from the Door view (or by
+URL). Pin each iPad to Safari with iOS **Guided Access**; leaving a station
+requires the organizer passcode.
+
+- **`/?station=register`** — self-serve walk-in registration. Guests enter
+  name/phone/party and either pay by card (Stripe) or choose "pay at the
+  cashier", which creates a **Pending** registration with a QR ticket. The
+  cashier finds them in the Door view and taps **Mark paid**; the scan
+  station flashes "payment due" until then.
+- **`/?station=scan`** — fullscreen ticket scanner (armed once with the
+  organizer passcode). Accepted / duplicate / invalid flashes, typed-code
+  fallback, per-station check-in tally.
+
+**How check-in validates** (why nobody can check in as someone else):
+self-serve check-in requires possession of the ticket QR/code — an
+unguessable 128-bit token. There is no name search on any self-serve screen;
+name lookup exists only in the staff Door view behind the passcode. Every
+accept flashes name + party size for staff to eyeball, and every attempt is
+logged in `ticket_scans`.
+
+Run `db/phase-b.sql` once in the Supabase SQL editor (after `db/phase-a.sql`)
+— it adds sponsor packages/benefits/logo storage and the lots `sale_type`
+column used by the silent-auction filter.
+
 ### Wallet passes (optional, env-gated)
 
 The **Add to Apple Wallet / Google Wallet** buttons appear automatically once

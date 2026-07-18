@@ -29,7 +29,7 @@ const HEADERS = {
   "Content-Type": "application/json",
 };
 
-const PUB = "id,name,party,event_id,checked_in,checked_in_at,bidder_number";
+const PUB = "id,name,party,event_id,checked_in,checked_in_at,bidder_number,status";
 
 async function logScan(entry) {
   try {
