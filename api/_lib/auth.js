@@ -55,28 +55,6 @@ async function orgPasscodeBySlug(slug, now) {
   }, now);
 }
 
-// Authorize an EXPLICIT key (used where the key isn't in the header — e.g. a
-// POST body) against the request's org/event context.
-export async function authorizeOrganizerKey(req, key, { masterOnly = false } = {}) {
-  if (!key) return false;
-  if (MASTER && key === MASTER) return true;   // platform master
-  if (masterOnly) return false;
-  const now = Date.now();
-
-  // Org-scoped screens: ?client=<slug>
-  const slug = requestedOrgSlug(req);
-  if (slug) {
-    const op = await orgPasscodeBySlug(slug, now);
-    if (op && key === op) return true;
-  }
-
-  // Event-scoped screens: the event's own passcode OR its org's owner passcode
-  const { event, org } = await eventCreds(requestedEvent(req), now);
-  if (event && key === event) return true;
-  if (org && key === org) return true;
-  return false;
-}
-
 // The org slug that owns an event (for session/role checks).
 async function eventOrgSlug(eventId, now) {
   return cached("evorg:" + eventId, async () => {
@@ -89,26 +67,64 @@ async function eventOrgSlug(eventId, now) {
   }, now);
 }
 
-// A logged-in Supabase user authorizes if they have the right membership.
-// Platform admins (owners of the platform org) pass everything, incl.
-// masterOnly. Otherwise any membership in the request's target org passes
-// non-master actions — same coarseness as that org's owner passcode. (Finer
-// per-role gating can tighten this later without weakening it.)
-async function authorizeSession(req, { masterOnly = false } = {}) {
+// ---------------------------------------------------------------------------
+// CAPABILITY LEVELS. Each credential grants a level for the request's org/
+// event context; each endpoint requires one. Higher includes lower.
+//   checkin (1) — door: scan tickets, read the roster, toggle check-in.
+//   manage  (2) — organizer: edit roster/sponsors/lots/settlement/branding.
+//   platform(3) — you: manage organizations, billing, payouts, event creation.
+export const LEVELS = { checkin: 1, manage: 2, platform: 3 };
+
+// The level a header/body PASSCODE grants for this request's context (0 = none).
+async function keyLevel(req, key) {
+  if (!key) return 0;
+  if (MASTER && key === MASTER) return LEVELS.platform;
+  const now = Date.now();
+  let lvl = 0;
+  const slug = requestedOrgSlug(req);
+  if (slug) {
+    const op = await orgPasscodeBySlug(slug, now);
+    if (op && key === op) lvl = Math.max(lvl, LEVELS.manage);   // org owner passcode
+  }
+  const { event, org } = await eventCreds(requestedEvent(req), now);
+  if (org && key === org) lvl = Math.max(lvl, LEVELS.manage);   // event's org owner passcode
+  if (event && key === event) lvl = Math.max(lvl, LEVELS.checkin); // event door passcode
+  return lvl;
+}
+
+// The level a logged-in SESSION grants for this request's context.
+async function sessionLevel(req) {
   const user = await sessionUser(req);
-  if (!user) return false;
-  if (await isPlatformAdmin(user.id)) return true;
-  if (masterOnly) return false;
+  if (!user) return 0;
+  if (await isPlatformAdmin(user.id)) return LEVELS.platform;
   const now = Date.now();
   const slug = requestedOrgSlug(req) || (await eventOrgSlug(requestedEvent(req), now));
-  if (!slug) return false;
+  if (!slug) return 0;
   const role = await roleForOrgSlug(user.id, slug);
-  return !!role;   // owner | admin | staff | door
+  if (role === "owner" || role === "admin" || role === "staff") return LEVELS.manage;
+  if (role === "door") return LEVELS.checkin;
+  return 0;
+}
+
+function required(opts = {}) {
+  if (opts.masterOnly) return LEVELS.platform;             // back-compat
+  return LEVELS[opts.capability] || LEVELS.manage;         // default: manage
+}
+
+// Authorize an EXPLICIT key (used where the key isn't in the header — e.g. a
+// POST body). Honors { capability } / { masterOnly }.
+export async function authorizeOrganizerKey(req, key, opts) {
+  return (await keyLevel(req, key)) >= required(opts);
 }
 
 // The common case: a request authenticates with EITHER the passcode header
-// (x-organizer-key) OR a logged-in Supabase session (Authorization: Bearer).
+// (x-organizer-key) OR a logged-in Supabase session (Authorization: Bearer),
+// and must reach the endpoint's required capability level.
+//   authorizeOrganizer(req)                         → needs 'manage'
+//   authorizeOrganizer(req, { capability:'checkin' })→ door is enough
+//   authorizeOrganizer(req, { masterOnly:true })     → platform only
 export async function authorizeOrganizer(req, opts) {
-  if (await authorizeOrganizerKey(req, req.headers["x-organizer-key"], opts)) return true;
-  return authorizeSession(req, opts);
+  const need = required(opts);
+  if ((await keyLevel(req, req.headers["x-organizer-key"])) >= need) return true;
+  return (await sessionLevel(req)) >= need;
 }

@@ -45,7 +45,7 @@ async function logScan(entry) {
 }
 
 export default async function handler(req, res) {
-  if (!(await authorizeOrganizer(req))) {
+  if (!(await authorizeOrganizer(req, { capability: "checkin" }))) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ error: "Method not allowed" }); }
