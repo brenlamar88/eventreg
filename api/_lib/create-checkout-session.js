@@ -10,7 +10,10 @@
 //                PUBLIC_BASE_URL   = https://your-site.vercel.app
 // ---------------------------------------------------------------------------
 import Stripe from "stripe";
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Lazy init: this module is bundled into the API router, so a missing key
+// must fail this route at request time, not every route at import time.
+let _stripe;
+const stripe = () => (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY));
 
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ error: "Method not allowed" }); }
@@ -18,7 +21,7 @@ export default async function handler(req, res) {
     const { email, lineItems, party, eventId, name, phone, source, walkin } = req.body || {};
     const successUrl = `${process.env.PUBLIC_BASE_URL}/?status=success&session_id={CHECKOUT_SESSION_ID}${walkin ? "&walkin=1" : ""}`;
     const cancelUrl = `${process.env.PUBLIC_BASE_URL}/?status=cancelled${walkin ? "&walkin=1" : ""}`;
-    const session = await stripe.checkout.sessions.create({
+    const session = await stripe().checkout.sessions.create({
       mode: "payment",
       customer_email: email || undefined,
       phone_number_collection: { enabled: true },

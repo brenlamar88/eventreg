@@ -6,7 +6,12 @@ functions in `/api`.
 
 ## Stack
 - Frontend: Vite + React (`src/BoilOnTheBend.jsx`)
-- Payments: Stripe Checkout (`api/create-checkout-session.js`, `api/stripe-webhook.js`)
+- API: ONE router function (`api/[...slug].js`) dispatching to handlers in
+  `api/_lib/` — URLs are unchanged (`/api/registrants`, `/api/scan`, …), but
+  the deployment is only 2 serverless functions (router + Stripe webhook),
+  which keeps it under Vercel's Hobby-plan 12-function cap. To add a route:
+  drop a handler in `api/_lib/` and register it in the router's ROUTES map.
+- Payments: Stripe Checkout (`api/_lib/create-checkout-session.js`, `api/stripe-webhook.js`)
 - Data: Supabase project **yellow-kite**, table `public.registrants`
 - Organizer roster read/check-in: `api/registrants.js` (service role + passcode)
 
