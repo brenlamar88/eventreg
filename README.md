@@ -96,6 +96,35 @@ Run `db/phase-b.sql` once in the Supabase SQL editor (after `db/phase-a.sql`)
 — it adds sponsor packages/benefits/logo storage and the lots `sale_type`
 column used by the silent-auction filter.
 
+### Offline door mode (Phase C)
+
+The door keeps working when venue internet drops — the thing Cvent OnArrival
+can't do. Run `db/phase-c.sql` once (after phase-b), and open the Door view /
+stations **once while online** on each iPad; from then on:
+
+- The page itself loads offline (service-worker app shell), and the roster
+  lives in an on-device manifest (IndexedDB), refreshed on every load and
+  every 2 minutes at the scan station.
+- **Scans keep working offline**: validated against the manifest, queued,
+  and replayed through `/api/scan-batch` when connectivity returns.
+  Reconciliation is **first-scan-wins** — the server's atomic claim decides;
+  if two offline devices both accepted the same ticket, staff see a conflict
+  banner naming the guest (never a silent drop). Replays are idempotent
+  (per-op ids), so a retried sync can't double-count or misreport.
+- **Walk-ins keep working offline** (cash at the Door view, self-serve at the
+  registration station): saved locally with their QR ticket — scannable on
+  that device immediately — and upserted on the unique ticket token at sync,
+  so a replay can never create a duplicate.
+- Staff edits (check-ins, Mark paid, bidder #s) queue as idempotent patches.
+- The Door view shows an offline banner with the queued-op count, last sync
+  time, and a "Sync now" button; stations show a queued badge.
+- A ticket sold online *after* the last sync scans as "Not in the offline
+  roster — verify manually", and still reconciles to a real verdict later.
+- Offline unlock only accepts the passcode the device verified while online
+  (an unverified passcode can't arm a device that has no server to ask).
+- Scope: each device queues its own work; devices see each other's changes
+  once connectivity returns. Card payments require connectivity (Stripe).
+
 ### Wallet passes (optional, env-gated)
 
 The **Add to Apple Wallet / Google Wallet** buttons appear automatically once

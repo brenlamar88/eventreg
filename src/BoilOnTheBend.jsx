@@ -8,6 +8,10 @@ import {
 import OrganizerNav from "./OrganizerNav.jsx";
 import TicketQR from "./TicketQR.jsx";
 import { DEMO_REGISTRANTS, DEMO_SPONSORS } from "./demoData.js";
+import {
+  saveManifest, manifestAll, manifestByToken, manifestPatch, manifestPut,
+  queueOp, pendingCount, getMeta, fetchT, flushOutbox,
+} from "./offline.js";
 
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_DEMO = URL_PARAMS.get("demo") === "true";
@@ -59,6 +63,37 @@ async function dbInsert(row) {
   });
   if (!r.ok) throw new Error(`Supabase insert failed (${r.status})`);
 }
+
+// Upsert flavor used by the offline outbox: keyed on the unique ticket_token,
+// so replaying a queued registration a second time is a no-op, never a dupe.
+// Takes the FULL row (event_id included) exactly as stored in the outbox.
+async function dbInsertUpsertRaw(fullRow) {
+  const r = await fetchT(`${SUPABASE.url}/rest/v1/${SUPABASE.table}?on_conflict=ticket_token`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE.publishableKey,
+      Authorization: `Bearer ${SUPABASE.publishableKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=ignore-duplicates,return=minimal",
+    },
+    body: JSON.stringify(fullRow),
+  });
+  if (!r.ok) throw new Error(`Supabase upsert failed (${r.status})`);
+}
+
+// Write a registration now if we can, queue it if we can't. Every row that
+// takes this path MUST carry a ticket_token (it's the idempotency key).
+// Returns "online" or "queued" so the UI can say which happened.
+async function persistRegistrant(row) {
+  const fullRow = { event_id: TICKET.id, ...row };
+  try {
+    await dbInsertUpsertRaw(fullRow);
+    return "online";
+  } catch {
+    await queueOp({ type: "insert", row: fullRow });
+    return "queued";
+  }
+}
 const dbRowToUI = (r) => ({
   id: r.id, name: r.name, email: r.email, phone: r.phone, party: r.party,
   source: r.source, status: r.status, amount: Number(r.amount) || 0,
@@ -102,7 +137,7 @@ async function startStripeWalkIn({ name, phone, party, total, lineItems }) {
 
 /* sample roster shown until the live DB loads (or in the preview) */
 const SAMPLE_ROSTER = [
-  { name: "Sample — load from DB", email: "guest1@example.com", phone: "(337) 555-0101", party: 2, source: "Jotform", status: "Paid", amount: 170, checkedIn: false, date: "2026-05-01" },
+  { id: "sample-1", name: "Sample — load from DB", email: "guest1@example.com", phone: "(337) 555-0101", party: 2, source: "Jotform", status: "Paid", amount: 170, checkedIn: false, date: "2026-05-01" },
 ];
 
 const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -339,17 +374,31 @@ function useTicketScanner(passcode, device, onAccepted) {
     busyRef.current = true;
     lastRef.current = { token, at: now };
     try {
-      const r = await fetch("/api/scan", {
+      const r = await fetchT("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-organizer-key": passcode },
         body: JSON.stringify({ token, device }),
-      });
+      }, 6000);
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || `Scan failed (${r.status})`);
+      if (!r.ok) throw Object.assign(new Error(data.error || `Scan failed (${r.status})`), { http: true });
       setStatus(data);
+      if (data.registrant?.id) {
+        // keep the offline manifest in step with what the server just decided
+        manifestPatch(data.registrant.id, { checked_in: true, checked_in_at: data.registrant.checked_in_at || null });
+      }
       if (data.result === "accepted") onAccepted?.(data.registrant);
     } catch (err) {
-      setStatus({ result: "error", message: err.message });
+      if (err.http) {
+        // The server answered — that's a real verdict (e.g. wrong passcode),
+        // not a connectivity problem. Don't fall back.
+        setStatus({ result: "error", message: err.message });
+      } else {
+        // Network down or hanging: judge against the offline manifest and
+        // queue the scan for first-scan-wins reconciliation.
+        const res = await offlineScan(token, device);
+        setStatus(res);
+        if (res.result === "accepted") onAccepted?.(res.registrant);
+      }
     } finally {
       busyRef.current = false;
     }
@@ -376,10 +425,27 @@ function useTicketScanner(passcode, device, onAccepted) {
   return { videoRef, status, cameraError, redeem };
 }
 
+// Offline verdict for a scanned token: check the local manifest, queue the
+// scan for reconciliation. "unknown" = not in the offline roster (could be a
+// ticket sold after the last sync) — staff verifies manually; the queued op
+// still gets a real verdict from the server later.
+async function offlineScan(token, device) {
+  const scannedAt = new Date().toISOString();
+  const row = await manifestByToken(token);
+  const localResult = !row ? "unknown" : row.checked_in ? "duplicate" : "accepted";
+  await queueOp({ type: "scan", token, device, scannedAt, localResult });
+  if (localResult === "accepted") {
+    await manifestPatch(row.id, { checked_in: true, checked_in_at: scannedAt });
+    return { result: "accepted", offline: true, registrant: { ...row, checked_in: true, checked_in_at: scannedAt } };
+  }
+  if (localResult === "duplicate") return { result: "duplicate", offline: true, registrant: row };
+  return { result: "unknown", offline: true, syncedAt: await getMeta("lastSyncAt") };
+}
+
 function ScanBanner({ status, big }) {
   if (!status) return null;
   const tone = status.result === "accepted" ? { bg: "#e4f0e9", fg: "var(--ok)", bd: "#b8dcc6" }
-    : status.result === "duplicate" ? { bg: "#f6ece0", fg: "var(--warn)", bd: "#e6cfa8" }
+    : status.result === "duplicate" || status.result === "unknown" ? { bg: "#f6ece0", fg: "var(--warn)", bd: "#e6cfa8" }
     : { bg: "#fdf0ec", fg: "#b4471f", bd: "#efc4b3" };
   const unpaid = status.registrant && status.registrant.status && status.registrant.status !== "Paid";
   const Icon = status.result === "accepted" ? CheckCircle2 : AlertTriangle;
@@ -389,10 +455,14 @@ function ScanBanner({ status, big }) {
       <Icon size={sz} style={{ display: "inline", verticalAlign: "middle", marginRight: 8 }} />
       {status.result === "accepted" && <>{status.registrant?.name || "Guest"} — party of {status.registrant?.party || 1} checked in!</>}
       {status.result === "duplicate" && <>Already checked in: {status.registrant?.name || "Guest"}{status.registrant?.checked_in_at ? ` at ${new Date(status.registrant.checked_in_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</>}
+      {status.result === "unknown" && <>Not in the offline roster{status.syncedAt ? ` (last synced ${new Date(status.syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})` : ""} — verify manually. It will reconcile when back online.</>}
       {status.result === "invalid" && <>Ticket not recognized.</>}
       {status.result === "error" && <>{status.message}</>}
       {unpaid && (status.result === "accepted" || status.result === "duplicate") && (
         <div style={{ marginTop: 6, fontSize: big ? 15 : 12.5, color: "var(--warn)" }}>Payment due — status is {status.registrant.status}. Send them to the cashier.</div>
+      )}
+      {status.offline && status.result !== "unknown" && (
+        <div style={{ marginTop: 6, fontSize: big ? 14 : 12, opacity: 0.85 }}>Offline — recorded locally, will sync.</div>
       )}
     </div>
   );
@@ -480,11 +550,16 @@ function ScanStation() {
     if (!keyInput.trim()) return;
     setChecking(true); setKeyErr("");
     try {
-      const r = await fetch("/api/registrants", { headers: { "x-organizer-key": keyInput } });
-      if (!r.ok) throw new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`);
+      const r = await fetchT("/api/registrants", { headers: { "x-organizer-key": keyInput } }, 8000);
+      if (!r.ok) throw Object.assign(new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`), { http: true });
       sessionStorage.setItem("doorKey", keyInput);
       setKeyState(keyInput);
-    } catch (err) { setKeyErr(err.message); }
+    } catch (err) {
+      // Offline arming is allowed only with the passcode this device already
+      // verified while online — we can't check a new one against anything.
+      if (!err.http && keyInput === sessionStorage.getItem("doorKey")) setKeyState(keyInput);
+      else setKeyErr(err.http ? err.message : "Offline — enter the passcode this iPad was armed with while online.");
+    }
     setChecking(false);
   };
 
@@ -507,6 +582,38 @@ function ScanStation() {
 
 function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, exitOpen, setExitOpen, exitInput, setExitInput }) {
   const { videoRef, status, cameraError, redeem } = useTicketScanner(passcode, "scan-station", onAccepted);
+  const [pending, setPending] = useState(0);
+  const [conflicts, setConflicts] = useState([]);
+
+  // Keep the station's manifest fresh while online, and flush queued scans
+  // the moment connectivity returns (retrying every 30 s while any remain).
+  useEffect(() => {
+    const refreshManifest = async () => {
+      try {
+        const r = await fetchT("/api/registrants", { headers: { "x-organizer-key": passcode } }, 10000);
+        if (r.ok) saveManifest(await r.json());
+      } catch { /* offline — the saved manifest carries the station */ }
+    };
+    const flush = async () => {
+      const { conflicts: found } = await flushOutbox({ passcode, insertFn: dbInsertUpsertRaw });
+      if (found.length) setConflicts((prev) => [...prev, ...found]);
+      setPending(await pendingCount());
+    };
+    refreshManifest();
+    pendingCount().then(setPending);
+    const onOnline = () => { flush(); refreshManifest(); };
+    window.addEventListener("online", onOnline);
+    const iv = setInterval(async () => {
+      if (navigator.onLine && (await pendingCount()) > 0) flush();
+    }, 30000);
+    const mv = setInterval(() => { if (navigator.onLine) refreshManifest(); }, 120000);
+    return () => { window.removeEventListener("online", onOnline); clearInterval(iv); clearInterval(mv); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passcode]);
+
+  // Reflect each redeem in the pending badge without waiting for the interval
+  useEffect(() => { pendingCount().then(setPending); }, [status]);
+
   return (
     <StationShell
       icon={<ScanLine size={15} />} title="Scan Station"
@@ -536,7 +643,16 @@ function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, e
           />
           <button className="btn btn-p" onClick={() => { if (manual.trim()) { redeem(manual); setManual(""); } }}>Check in</button>
         </div>
-        <p style={{ color: "#9DB3A8", fontSize: 13, marginTop: 16, textAlign: "center" }}>{accepted} checked in at this station · not registered yet? Use the registration iPad.</p>
+        {conflicts.length > 0 && (
+          <div style={{ marginTop: 14, background: "#fdf0ec", border: "1.5px solid #efc4b3", borderRadius: 12, padding: "12px 14px", fontSize: 13.5, color: "#b4471f" }}>
+            <b><AlertTriangle size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />Conflicts after sync:</b>{" "}
+            {conflicts.map((c) => c.name).join(", ")} had already checked in on another device.
+            <button onClick={() => setConflicts([])} style={{ marginLeft: 10, background: "none", border: "none", color: "#b4471f", fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>Dismiss</button>
+          </div>
+        )}
+        <p style={{ color: "#9DB3A8", fontSize: 13, marginTop: 16, textAlign: "center" }}>
+          {accepted} checked in at this station{pending > 0 ? ` · ${pending} queued to sync` : ""} · not registered yet? Use the registration iPad.
+        </p>
       </div>
     </StationShell>
   );
@@ -549,9 +665,24 @@ function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, e
 function RegisterStation() {
   const isStripeReturn = URL_PARAMS.get("status") === "success" && !!URL_PARAMS.get("session_id");
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", party: 1 });
-  const [done, setDone] = useState(null); // { token, name, party, paid }
+  const [done, setDone] = useState(null); // { token, name, party, paid, queued }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [online, setOnline] = useState(navigator.onLine);
+
+  // Card payments need Stripe (a network), so track connectivity — and flush
+  // any queued registrations when it returns (upserts on the ticket_token
+  // need no passcode, so the self-serve station syncs itself).
+  useEffect(() => {
+    const up = () => { setOnline(true); flushOutbox({ passcode: sessionStorage.getItem("doorKey") || "", insertFn: dbInsertUpsertRaw }); };
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    const iv = setInterval(async () => {
+      if (navigator.onLine && (await pendingCount()) > 0) flushOutbox({ passcode: sessionStorage.getItem("doorKey") || "", insertFn: dbInsertUpsertRaw });
+    }, 30000);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); clearInterval(iv); };
+  }, []);
 
   // Returning from kiosk card payment: fetch the webhook-minted ticket.
   useEffect(() => {
@@ -587,16 +718,16 @@ function RegisterStation() {
     setBusy(true); setErr("");
     const name = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
     const token = mintTicketToken();
-    try {
-      await dbInsert({
-        name, phone: form.phone.trim() || null, email: form.email.trim() || null,
-        party: form.party || 1, source: "Walk-in", status: "Pending", amount: 0,
-        checked_in: false, ticket_token: token,
-      });
-      setDone({ token, name, party: form.party || 1, paid: false });
-    } catch {
-      setErr("Something went wrong — please see a staff member.");
-    }
+    const row = {
+      name, phone: form.phone.trim() || null, email: form.email.trim() || null,
+      party: form.party || 1, source: "Walk-in", status: "Pending", amount: 0,
+      checked_in: false, ticket_token: token,
+    };
+    // Online: writes straight through. Offline: queues on the outbox and
+    // lands in the local manifest so the ticket scans on this device now.
+    const wrote = await persistRegistrant(row);
+    if (wrote === "queued") manifestPut({ id: `tmp-${crypto.randomUUID()}`, ...row });
+    setDone({ token, name, party: form.party || 1, paid: false, queued: wrote === "queued" });
     setBusy(false);
   };
 
@@ -627,6 +758,7 @@ function RegisterStation() {
         <p style={{ color: "#A9C0B5", fontSize: 14.5, marginTop: 18, textAlign: "center", maxWidth: 440 }}>
           {done.paid ? "Enjoy the event!" : "Show this screen at the cashier table. They'll take your payment and scan you in."}
           {" "}Take a photo of the QR code to keep your ticket.
+          {done.queued ? " (Saved on this iPad — syncs automatically when the internet returns.)" : ""}
         </p>
         <button className="btn btn-p" style={{ marginTop: 22 }} onClick={reset}>Done — next guest</button>
       </StationShell>
@@ -662,13 +794,14 @@ function RegisterStation() {
         {err && <div style={{ fontSize: 13.5, color: "#b4471f", fontWeight: 600 }}><AlertTriangle size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{err}</div>}
         <div style={{ display: "grid", gap: 10 }}>
           {STRIPE_CONFIG.liveMode && (
-            <button className="btn btn-p" style={{ justifyContent: "center", width: "100%" }} onClick={registerPayCard} disabled={busy}>
-              <CreditCard size={17} /> {busy ? "One moment…" : `Pay ${money(total)} by card`}
+            <button className="btn btn-p" style={{ justifyContent: "center", width: "100%" }} onClick={registerPayCard} disabled={busy || !online}>
+              <CreditCard size={17} /> {busy ? "One moment…" : !online ? "Card unavailable offline" : `Pay ${money(total)} by card`}
             </button>
           )}
-          <button className={`btn ${STRIPE_CONFIG.liveMode ? "btn-g" : "btn-p"}`} style={{ justifyContent: "center", width: "100%" }} onClick={registerPayAtDoor} disabled={busy}>
+          <button className={`btn ${STRIPE_CONFIG.liveMode && online ? "btn-g" : "btn-p"}`} style={{ justifyContent: "center", width: "100%" }} onClick={registerPayAtDoor} disabled={busy}>
             <UserPlus size={17} /> {busy ? "One moment…" : "Register — pay at the cashier"}
           </button>
+          {!online && <div style={{ fontSize: 12.5, color: "var(--warn)", fontWeight: 600, textAlign: "center" }}>Offline — registrations are saved on this iPad and sync automatically.</div>}
         </div>
       </div>
     </StationShell>
@@ -692,6 +825,37 @@ export default function BoilOnTheBend() {
   // Which wallet buttons to show — the endpoints are env-gated, so probe once
   // on the confirmation screen and only render buttons that will work.
   const [walletAvail, setWalletAvail] = useState({ apple: false, google: false });
+
+  // Offline sync state: queued ops waiting to reach the server, last good
+  // roster sync, and first-scan-wins conflicts surfaced to staff.
+  const [pending, setPending] = useState(0);
+  const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [conflicts, setConflicts] = useState([]);
+  const refreshPending = async () => {
+    setPending(await pendingCount());
+    setLastSyncAt(await getMeta("lastSyncAt"));
+  };
+  const doFlush = async (pc = passcode || sessionStorage.getItem("doorKey") || "") => {
+    const { flushed, conflicts: found } = await flushOutbox({ passcode: pc, insertFn: dbInsertUpsertRaw });
+    if (found.length) setConflicts((prev) => [...prev, ...found]);
+    await refreshPending();
+    if (flushed > 0 && navigator.onLine && pc) loadRoster(pc);
+    return flushed;
+  };
+
+  // Flush the outbox the moment connectivity returns (and retry every 30 s
+  // while anything is queued — the "online" event is not always reliable).
+  useEffect(() => {
+    if (IS_DEMO) return;
+    refreshPending();
+    const onOnline = () => { doFlush(); };
+    window.addEventListener("online", onOnline);
+    const iv = setInterval(async () => {
+      if (navigator.onLine && (await pendingCount()) > 0) doFlush();
+    }, 30000);
+    return () => { window.removeEventListener("online", onOnline); clearInterval(iv); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passcode]);
 
   const [roster, setRoster] = useState(SAMPLE_ROSTER);
   const [sponsors, setSponsors] = useState([]);
@@ -791,9 +955,10 @@ export default function BoilOnTheBend() {
   useEffect(() => {
     if (IS_DEMO || dbState !== "live") return;
     const id = setInterval(() => {
+      if (!navigator.onLine) return; // offline: the manifest is the roster
       fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } })
         .then((r) => r.ok ? r.json() : null)
-        .then((rows) => { if (rows) setRoster(rows.map(dbRowToUI)); })
+        .then((rows) => { if (rows) { setRoster(rows.map(dbRowToUI)); saveManifest(rows); } })
         .catch(() => {});
     }, 20000);
     return () => clearInterval(id);
@@ -830,7 +995,7 @@ export default function BoilOnTheBend() {
       bidder_number: bidderNo, ticket_token: token,
     };
     try { await dbInsert(row); } catch (err) { console.warn("DB write skipped:", err.message); }
-    setRoster((r) => [{ ...row, checkedIn: false, date: new Date().toISOString().slice(0, 10), bidderNumber: bidderNo }, ...r]);
+    setRoster((r) => [{ ...row, id: `tmp-${crypto.randomUUID()}`, checkedIn: false, date: new Date().toISOString().slice(0, 10), bidderNumber: bidderNo }, ...r]);
     setTicket({ token, name: row.name, party: qty });
     setStep(3); window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -857,14 +1022,33 @@ export default function BoilOnTheBend() {
   const loadRoster = async (pc = passcode) => {
     setDbState("loading"); setDbMsg("");
     try {
-      const r = await fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": pc } });
-      if (!r.ok) throw new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`);
+      const r = await fetchT(ROSTER_ENDPOINT, { headers: { "x-organizer-key": pc } }, 10000);
+      if (!r.ok) throw Object.assign(new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`), { http: true });
       const rows = await r.json();
       setRoster(rows.map(dbRowToUI));
+      // This passcode just proved itself against the server — it's the one an
+      // offline unlock may trust later. (Stored only on success, on purpose.)
+      sessionStorage.setItem("doorKey", pc);
+      saveManifest(rows);
+      refreshPending();
       setDbState("live"); setDbMsg(`Loaded ${rows.length} registrant${rows.length === 1 ? "" : "s"} from yellow-kite.`);
       // Load sponsors for association dropdown (best-effort)
       try { const sr = await fetch("/api/sponsors", { headers: { "x-organizer-key": pc } }); if (sr.ok) { const sd = await sr.json(); setSponsors(Array.isArray(sd) ? sd : []); } } catch {}
     } catch (err) {
+      // Network down (not a server verdict like 401): run the door from the
+      // offline manifest — but only for the passcode that armed this device
+      // while online, since we can't verify a new one without a server.
+      if (!err.http && pc && pc === sessionStorage.getItem("doorKey")) {
+        const rows = await manifestAll();
+        if (rows.length) {
+          setRoster(rows.map(dbRowToUI));
+          const syncedAt = await getMeta("lastSyncAt");
+          refreshPending();
+          setDbState("offline");
+          setDbMsg(`Offline — running from the saved roster (${rows.length} people, synced ${syncedAt ? new Date(syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "earlier"}). Check-ins and walk-ins queue and sync automatically.`);
+          return;
+        }
+      }
       setDbState("offline");
       setDbMsg(`Live DB unavailable (${err.message}) — showing local data. This works once deployed to Vercel.`);
     }
@@ -879,18 +1063,32 @@ export default function BoilOnTheBend() {
       try { await dbInsert({ name: m.name, email: m.email, phone: m.phone, party: m.party, source: "Jotform", status: m.status, amount: m.amount, notes: m.notes || null }); written++; }
       catch (err) { /* preview / offline */ }
     }
-    setRoster((r) => [...mapped, ...r]); setImportText("");
+    setRoster((r) => [...mapped.map((m) => ({ ...m, id: `tmp-${crypto.randomUUID()}` })), ...r]); setImportText("");
     setImportMsg(written ? `Imported ${mapped.length} registrants (${written} written to Supabase).` : `Added ${mapped.length} locally. Connect the live DB (deploy) to persist them.`);
   };
 
-  const toggleCheckIn = async (idx) => {
-    const target = roster[idx];
-    setRoster((r) => r.map((p, i) => i === idx ? { ...p, checkedIn: !p.checkedIn } : p));
-    if (target.id && passcode) {
-      try {
-        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, checked_in: !target.checkedIn }) });
-      } catch (err) { /* keep optimistic local state */ }
+  // All roster mutations key on the row's id — never its array index, which
+  // races the 20 s poll (a reorder mid-tap used to hit the wrong person).
+  // Server-bound rows: PATCH now, queue the same patch if the network fails.
+  // tmp- rows (created offline) reach the server via their queued insert,
+  // which already carries their latest local state.
+  const isServerRow = (p) => p.id && !String(p.id).startsWith("tmp-") && !String(p.id).startsWith("sample-");
+  const patchOrQueue = async (person, fields) => {
+    if (IS_DEMO || !isServerRow(person) || !passcode) return;
+    try {
+      const r = await fetchT(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id, ...fields }) });
+      if (!r.ok) throw new Error(`PATCH ${r.status}`);
+    } catch {
+      await queueOp({ type: "patch", id: person.id, fields });
+      refreshPending();
     }
+  };
+
+  const toggleCheckIn = async (person) => {
+    const next = !person.checkedIn;
+    setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, checkedIn: next } : p)));
+    manifestPatch(person.id, { checked_in: next, checked_in_at: next ? new Date().toISOString() : null });
+    await patchOrQueue(person, { checked_in: next });
   };
 
   // Cashier control: settle a pay-at-the-door registration (from the
@@ -898,59 +1096,41 @@ export default function BoilOnTheBend() {
   const markPaid = async (person) => {
     const amount = (person.party || 1) * TICKET.price;
     setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, status: "Paid", amount } : p)));
-    if (person.id && passcode) {
+    manifestPatch(person.id, { status: "Paid", amount });
+    await patchOrQueue(person, { status: "Paid", amount });
+  };
+
+  const deleteRegistrant = async (person) => {
+    if (!window.confirm(`Delete ${person.name}? This cannot be undone.`)) return;
+    setRoster((r) => r.filter((p) => p.id !== person.id));
+    if (isServerRow(person) && passcode) {
       try {
-        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id, status: "Paid", amount }) });
-      } catch { /* keep optimistic local state */ }
+        await fetch(ROSTER_ENDPOINT, { method: "DELETE", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id }) });
+      } catch (err) { /* deletes are online-only; the poll restores the row if it failed */ }
     }
   };
 
-  const deleteRegistrant = async (idx) => {
-    const target = roster[idx];
-    if (!window.confirm(`Delete ${target.name}? This cannot be undone.`)) return;
-    setRoster((r) => r.filter((_, i) => i !== idx));
-    if (target.id && passcode) {
-      try {
-        await fetch(ROSTER_ENDPOINT, { method: "DELETE", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id }) });
-      } catch (err) { /* keep optimistic local state */ }
-    }
+  const saveBidderNumber = async (person, value) => {
+    setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, bidderNumber: value } : p)));
+    await patchOrQueue(person, { bidder_number: value || null });
   };
 
-  const saveBidderNumber = async (idx, value) => {
-    const target = roster[idx];
-    setRoster((r) => r.map((p, i) => i === idx ? { ...p, bidderNumber: value } : p));
-    if (target.id && passcode) {
-      try {
-        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, bidder_number: value || null }) });
-      } catch (err) { /* keep optimistic local state */ }
-    }
+  const savePhone = async (person, value) => {
+    setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, phone: value } : p)));
+    await patchOrQueue(person, { phone: value || null });
   };
 
-  const savePhone = async (idx, value) => {
-    const target = roster[idx];
-    setRoster((r) => r.map((p, i) => i === idx ? { ...p, phone: value } : p));
-    if (target.id && passcode) {
-      try {
-        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, phone: value || null }) });
-      } catch (err) { /* keep optimistic local state */ }
-    }
-  };
-
-  const saveSponsor = async (idx, sponsorId) => {
-    const target = roster[idx];
+  const saveSponsor = async (person, sponsorId) => {
     const sp = sponsors.find((s) => s.id === sponsorId) || null;
-    setRoster((r) => r.map((p, i) => i === idx ? { ...p, sponsorId: sponsorId || null, sponsorName: sp?.name || null } : p));
-    if (target.id && passcode) {
-      try {
-        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, sponsor_id: sponsorId || null }) });
-      } catch {}
-    }
+    setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, sponsorId: sponsorId || null, sponsorName: sp?.name || null } : p)));
+    await patchOrQueue(person, { sponsor_id: sponsorId || null });
   };
 
   const nextBidderNumber = async () => {
     // Always fetch fresh roster from DB to avoid duplicates across devices
+    // (timeboxed: offline falls back to the local roster quickly)
     try {
-      const r = await fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } });
+      const r = await fetchT(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } }, 6000);
       if (r.ok) {
         const rows = await r.json();
         setRoster(rows.map(dbRowToUI)); // also refresh local state
@@ -999,7 +1179,8 @@ export default function BoilOnTheBend() {
 
     const handleDoorUnlock = async () => {
       if (!passcode.trim()) return;
-      sessionStorage.setItem("doorKey", passcode);
+      // doorKey is stored by loadRoster only after the server (or the
+      // offline-manifest match) accepts this passcode — never before.
       setDoorUnlocked(true);
       await loadRoster(passcode);
     };
@@ -1013,15 +1194,21 @@ export default function BoilOnTheBend() {
         name: fullName, phone: walkInForm.phone.trim(), ranch: walkInForm.ranch.trim() || null,
         notes: walkInForm.ranch.trim() || null,
         party: walkInForm.party || 1, source: "Walk-in",
-        status: "Paid", amount: walkInTotal, checked_in: true, bidder_number: bidderNo,
-        ticket_token: mintTicketToken(),
+        status: "Paid", amount: walkInTotal, checked_in: true, checked_in_at: new Date().toISOString(),
+        bidder_number: bidderNo, ticket_token: mintTicketToken(),
       };
-      try { await dbInsert(row); } catch (err) { /* offline fallback */ }
-      const uiRow = { ...row, checkedIn: true, date: new Date().toISOString().slice(0, 10), id: `wi-${Date.now()}`, bidderNumber: bidderNo };
+      // Writes now, or queues on the outbox when offline (idempotent on the
+      // ticket_token, so the sync replay can never create a duplicate).
+      const wrote = await persistRegistrant(row);
+      const tmpId = `tmp-${crypto.randomUUID()}`;
+      // Into the local manifest too, so their fresh QR scans even offline.
+      manifestPut({ id: tmpId, ...row });
+      const uiRow = { ...row, checkedIn: true, date: new Date().toISOString().slice(0, 10), id: tmpId, bidderNumber: bidderNo };
       setRoster((r) => [uiRow, ...r]);
       setWalkIns((w) => [{ ...row, payment: "cash", time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }, ...w]);
       setWalkInForm({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: walkInForm.payment });
-      setWalkInMsg(`${fullName} added and checked in!`);
+      setWalkInMsg(`${fullName} added and checked in!${wrote === "queued" ? " (offline — will sync)" : ""}`);
+      if (wrote === "queued") refreshPending();
       setWalkInLoading(false);
       setTimeout(() => setWalkInMsg(""), 6000);
     };
@@ -1083,6 +1270,36 @@ export default function BoilOnTheBend() {
                 <span style={{ fontSize: 12, color: "var(--inkSoft)" }}>Pin with iOS Guided Access. Exit needs the passcode.</span>
               </div>
 
+              {/* Offline sync status */}
+              {(dbState === "offline" || pending > 0) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 18, background: "#f6ece0", border: "1.5px solid #e6cfa8", borderRadius: 14, padding: "12px 16px", fontSize: 13.5, fontWeight: 600, color: "var(--warn)" }}>
+                  <span className="dot" style={{ background: dbState === "offline" ? "var(--warn)" : "var(--ok)" }} />
+                  {dbState === "offline" ? "Offline — working from the saved roster." : "Back online."}
+                  {pending > 0 && <span>{pending} update{pending === 1 ? "" : "s"} queued</span>}
+                  {lastSyncAt && <span style={{ fontWeight: 500 }}>Last synced {new Date(lastSyncAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
+                  {pending > 0 && (
+                    <button className="btn btn-g" style={{ padding: "7px 14px", fontSize: 12.5 }} onClick={() => doFlush()}>
+                      <RefreshCw size={13} /> Sync now
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* First-scan-wins conflicts surfaced to staff, never dropped */}
+              {conflicts.length > 0 && (
+                <div style={{ marginBottom: 18, background: "#fdf0ec", border: "1.5px solid #efc4b3", borderRadius: 14, padding: "14px 16px" }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#b4471f", display: "flex", alignItems: "center", gap: 8 }}>
+                    <AlertTriangle size={16} /> Check-in conflicts — first scan won
+                  </div>
+                  <ul style={{ margin: "8px 0 10px", paddingLeft: 22, fontSize: 13.5, color: "var(--ink)" }}>
+                    {conflicts.map((c, i) => (
+                      <li key={i}><b>{c.name}</b> was accepted on this device while offline, but had already checked in{c.at ? ` at ${new Date(c.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""} elsewhere.</li>
+                    ))}
+                  </ul>
+                  <button className="btn btn-g" style={{ padding: "7px 14px", fontSize: 12.5 }} onClick={() => setConflicts([])}>Dismiss</button>
+                </div>
+              )}
+
               {doorFlash && <div className="door-flash"><CheckCircle2 size={20} />{doorFlash}</div>}
 
               {/* ---- Check In Pre-Registered ---- */}
@@ -1128,7 +1345,6 @@ export default function BoilOnTheBend() {
                       <div style={{ padding: 28, textAlign: "center", color: "var(--inkSoft)" }}>No matches for &ldquo;{doorSearch}&rdquo;</div>
                     ) : (
                       doorFiltered.map((p, i) => {
-                        const idx = roster.indexOf(p);
                         const { first, last } = splitName(p.name);
                         return (
                           <div className="door-result" key={p.id || i}>
@@ -1153,7 +1369,7 @@ export default function BoilOnTheBend() {
                               className={`door-ci-btn${p.checkedIn ? " done" : ""}`}
                               onClick={() => {
                                 if (!p.checkedIn) {
-                                  toggleCheckIn(idx);
+                                  toggleCheckIn(p);
                                   setDoorFlash(`${p.name} — party of ${p.party || 1} checked in!`);
                                   setTimeout(() => setDoorFlash(null), 5000);
                                 }
@@ -1327,30 +1543,29 @@ export default function BoilOnTheBend() {
             <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Sponsor</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
-                const idx = roster.indexOf(p);
                 const { first, last } = splitName(p.name);
                 const ranch = p.ranch || p.notes || "—";
                 const inpStyle = { fontFamily: "inherit", fontSize: 12.5, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, width: "100%", minWidth: 90 };
                 return (
                   <tr key={p.id || i}>
-                    <td><input style={{ fontFamily: "inherit", fontSize: 13, fontWeight: 700, width: 64, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, textAlign: "center" }} value={p.bidderNumber || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x, xi) => xi === idx ? { ...x, bidderNumber: e.target.value } : x))} onBlur={(e) => saveBidderNumber(idx, e.target.value)} /></td>
+                    <td><input style={{ fontFamily: "inherit", fontSize: 13, fontWeight: 700, width: 64, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, textAlign: "center" }} value={p.bidderNumber || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x) => x.id === p.id ? { ...x, bidderNumber: e.target.value } : x))} onBlur={(e) => saveBidderNumber(p, e.target.value)} /></td>
                     <td style={{ fontWeight: 700 }}>{first}</td>
                     <td style={{ fontWeight: 700 }}>{last}</td>
                     <td style={{ color: "var(--inkSoft)" }}>{ranch}</td>
                     <td>
                       <select style={{ fontFamily: "inherit", fontSize: 12.5, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, background: "#fff", color: "var(--ink)", minWidth: 130 }}
                         value={p.sponsorId || ""}
-                        onChange={(e) => saveSponsor(idx, e.target.value || null)}>
+                        onChange={(e) => saveSponsor(p, e.target.value || null)}>
                         <option value="">— None —</option>
                         {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </td>
                     <td style={{ color: "var(--inkSoft)", fontSize: 12.5 }}>{p.email}</td>
-                    <td><input style={inpStyle} value={p.phone || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x, xi) => xi === idx ? { ...x, phone: e.target.value } : x))} onBlur={(e) => savePhone(idx, e.target.value)} /></td>
+                    <td><input style={inpStyle} value={p.phone || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x) => x.id === p.id ? { ...x, phone: e.target.value } : x))} onBlur={(e) => savePhone(p, e.target.value)} /></td>
                     <td>{p.party || 1}</td>
                     <td><span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span></td>
-                    <td><button className={`ci ${p.checkedIn ? "on" : ""}`} onClick={() => toggleCheckIn(idx)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? "In" : "Check in"}</button></td>
-                    <td><button className="ci" style={{ color: "#b4471f" }} onClick={() => deleteRegistrant(idx)}><Trash2 size={16} /></button></td>
+                    <td><button className={`ci ${p.checkedIn ? "on" : ""}`} onClick={() => toggleCheckIn(p)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? "In" : "Check in"}</button></td>
+                    <td><button className="ci" style={{ color: "#b4471f" }} onClick={() => deleteRegistrant(p)}><Trash2 size={16} /></button></td>
                   </tr>
                 );
               })}
