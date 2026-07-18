@@ -4,6 +4,7 @@
 //   event_settings.logo_url. Returns { ok:true, logoUrl }.
 // Gated by x-organizer-key header. Same pattern as api/sponsor-logo.js.
 import { requestedEvent } from "./event.js";
+import { authorizeOrganizer } from "./auth.js";
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -12,7 +13,7 @@ const ALLOWED = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
 const MAX_B64 = 2_800_000; // ≈2 MB decoded
 
 export default async function handler(req, res) {
-  if (!req.headers["x-organizer-key"] || req.headers["x-organizer-key"] !== PASS) {
+  if (!(await authorizeOrganizer(req))) {
     return res.status(401).json({ error: "Unauthorized" });
   }
   if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ error: "Method not allowed" }); }

@@ -10,6 +10,7 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORGANIZER_PASSCODE
 // ---------------------------------------------------------------------------
 import { requestedEvent } from "./event.js";
+import { authorizeOrganizer } from "./auth.js";
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -17,7 +18,7 @@ const YEAR = 2026;
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
 
 export default async function handler(req, res) {
-  if (req.headers["x-organizer-key"] !== PASS) return res.status(401).json({ error: "Unauthorized" });
+  if (!(await authorizeOrganizer(req))) return res.status(401).json({ error: "Unauthorized" });
   const base = `${SB}/rest/v1/lots`;
   try {
     if (req.method === "GET") {

@@ -1,0 +1,21 @@
+-- db/phase-f.sql — Per-event organizer passcodes (Phase F)
+-- ---------------------------------------------------------------------------
+-- Run once in the Supabase SQL editor, AFTER db/phase-e.sql. Safe to re-run.
+--
+-- Each event can have its OWN organizer passcode. Auth model:
+--   • The env var ORGANIZER_PASSCODE stays the MASTER key — it works for
+--     every event and is the only key that can list/create events or change
+--     the default. (This is you, the platform owner.)
+--   • If an event_settings row has organizer_passcode set, that value ALSO
+--     unlocks that event's roster / door / sponsors / lots / settings — but
+--     only that event. Hand it to a chapter's door staff and they can't
+--     reach any other event's data.
+--   • Events with no passcode set keep falling back to the master key, so
+--     nothing changes until an organizer sets one.
+--
+-- The passcode is a secret: it is NEVER returned by the public event-config
+-- GET (not in the whitelist) and the organizer event-list returns only a
+-- has_passcode boolean, never the value.
+-- ---------------------------------------------------------------------------
+
+alter table event_settings add column if not exists organizer_passcode text;
