@@ -10,16 +10,18 @@
 // Env vars: STRIPE_SECRET_KEY, ORGANIZER_PASSCODE, (optional) NEXT_PUBLIC_SITE_URL
 // ---------------------------------------------------------------------------
 import Stripe from "stripe";
+import { authorizeOrganizerKey } from "./auth.js";
 
 // Lazy init: this module is bundled into the API router, so a missing key
 // must fail this route at request time, not every route at import time.
 let _stripe;
 const stripe = () => (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY));
-const PASS   = process.env.ORGANIZER_PASSCODE;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).end(); }
-  if (!req.body?.passcode || req.body.passcode !== PASS) return res.status(401).json({ error: "Unauthorized" });
+  // Passcode arrives in the body here (not the header) — master key or the
+  // requested event's own passcode both authorize.
+  if (!(await authorizeOrganizerKey(req, req.body?.passcode))) return res.status(401).json({ error: "Unauthorized" });
 
   const { lotId, lotNo, description, amount, buyerName, buyerEmail } = req.body || {};
   if (!amount || Number(amount) <= 0) return res.status(400).json({ error: "Invalid amount" });

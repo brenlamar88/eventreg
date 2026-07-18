@@ -180,6 +180,24 @@ pricing, roster, sponsors, packages, auction, and settings. An event is an
   existing data to the `boil85` event and marks it the default, so the
   current site is unchanged.
 
+### Per-event organizer passcodes (Phase F)
+
+Each event can have **its own organizer passcode**, so a chapter's door staff
+only reach that chapter's data:
+
+- The env var `ORGANIZER_PASSCODE` is the **master key** — it works for every
+  event and is the only key that can list events, create events, change the
+  default, or set a per-event passcode. That's you, the platform owner.
+- On the Event Setup screen (`/?app=setup`), select an event and set its
+  **"Organizer passcode for this event."** Hand that to the chapter's staff —
+  it unlocks only that event's roster, door, stations, sponsors, and auction.
+- Events with no passcode fall back to the master key, so nothing changes
+  until you set one.
+- The passcode is write-only: it's never returned by any API (the event list
+  shows only whether one is set), and every organizer endpoint authorizes
+  against the master key or the requested event's own passcode.
+- Run `db/phase-f.sql` once (after `db/phase-e.sql`).
+
 ### Wallet passes (optional, env-gated)
 
 The **Add to Apple Wallet / Google Wallet** buttons appear automatically once

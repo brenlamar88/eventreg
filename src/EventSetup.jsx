@@ -11,8 +11,8 @@ const LS_KEY = "eventreg-config-v1" + (EVENT_PARAM ? ":" + EVENT_PARAM : "");
 const SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/;
 
 const DEMO_EVENTS = [
-  { event_id: "boil85", event_name: "Boil on the Bend", event_year: 2026, is_default: true },
-  { event_id: "spring-gala", event_name: "Spring Gala", event_year: 2026, is_default: false },
+  { event_id: "boil85", event_name: "Boil on the Bend", event_year: 2026, is_default: true, has_passcode: false },
+  { event_id: "spring-gala", event_name: "Spring Gala", event_year: 2026, is_default: false, has_passcode: true },
 ];
 
 const Styles = () => (
@@ -101,6 +101,8 @@ export default function EventSetup() {
   const [saveErr, setSaveErr] = useState("");
   const [events, setEvents] = useState([]);
   const [newEv, setNewEv] = useState({ slug: "", name: "", year: "2026" });
+  const [pcInput, setPcInput] = useState("");
+  const [pcMsg, setPcMsg] = useState("");
   const [evErr, setEvErr] = useState("");
   const [evBusy, setEvBusy] = useState(false);
 
@@ -189,6 +191,23 @@ export default function EventSetup() {
     } catch { /* leave list untouched */ }
   };
 
+  // Set or clear THIS event's organizer passcode. Requires the master key
+  // (the server enforces this); an empty value clears it back to master-only.
+  const savePasscode = async (clear = false) => {
+    if (IS_DEMO || !connected) return;
+    setPcMsg("");
+    try {
+      const r = await fetch(`/api/event-config?event=${encodeURIComponent(currentId)}`, {
+        method: "PUT", headers: hdr(), body: JSON.stringify({ organizerPasscode: clear ? "" : pcInput.trim() }),
+      });
+      if (r.status === 401) { setPcMsg("Only the master passcode can set per-event passcodes."); return; }
+      if (!r.ok) { const j = await r.json().catch(() => ({})); setPcMsg(j.error || `Error ${r.status}`); return; }
+      setPcInput("");
+      setPcMsg(clear ? "Passcode cleared — this event now uses the master passcode." : "Passcode saved. Door staff for this event use it to sign in.");
+      await refreshEvents();
+    } catch (e) { setPcMsg(e.message); }
+  };
+
   const save = async () => {
     if (IS_DEMO || !connected) return;
     setSaveState("saving"); setSaveErr("");
@@ -212,7 +231,7 @@ export default function EventSetup() {
       const r = await fetch(withEvent("/api/event-config"), { method: "PUT", headers: hdr(), body: JSON.stringify(body) });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || `Error ${r.status}`);
+        throw new Error([j.error, j.detail].filter(Boolean).join(" — ") || `Error ${r.status}`);
       }
       // Drop the cached config so the next boot refetches the fresh row.
       try { localStorage.removeItem(LS_KEY); } catch {}
@@ -298,6 +317,25 @@ export default function EventSetup() {
               {!IS_DEMO && curEv && !curEv.is_default && (
                 <button className="btn ghost sm" onClick={makeDefault}><Check size={13} /> Make this the default event</button>
               )}
+            </div>
+
+            <div style={{ borderTop: "1px solid var(--line)", margin: "16px 0 14px" }} />
+
+            {/* Per-event organizer passcode */}
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+              Organizer passcode for this event
+              {curEv && (curEv.has_passcode
+                ? <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ok)", background: "#e4f0e9", borderRadius: 999, padding: "2px 9px" }}>SET</span>
+                : <span style={{ fontSize: 11, fontWeight: 700, color: "var(--inkSoft)", background: "var(--bone2)", borderRadius: 999, padding: "2px 9px" }}>uses master</span>)}
+            </div>
+            <p style={{ fontSize: 12, color: "var(--inkSoft)", margin: "0 0 10px" }}>
+              Give this to the chapter's door staff — it unlocks only this event's roster, door, sponsors, and auction. The master passcode always works too. Requires the master passcode to change.
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input className="pwd" style={{ width: 220 }} type="password" placeholder={curEv?.has_passcode ? "New passcode…" : "Set a passcode…"} value={pcInput} disabled={!canEdit} onChange={(e) => setPcInput(e.target.value)} />
+              <button className="btn sm" disabled={IS_DEMO || !connected || !pcInput.trim()} onClick={() => savePasscode(false)}>Save passcode</button>
+              {curEv?.has_passcode && <button className="btn ghost sm" disabled={IS_DEMO || !connected} onClick={() => savePasscode(true)}>Clear</button>}
+              {pcMsg && <span style={{ fontSize: 12.5, color: pcMsg.startsWith("Passcode saved") || pcMsg.startsWith("Passcode cleared") ? "var(--ok)" : "var(--warn)" }}>{pcMsg}</span>}
             </div>
 
             <div style={{ borderTop: "1px solid var(--line)", margin: "16px 0 14px" }} />

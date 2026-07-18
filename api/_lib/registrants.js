@@ -16,13 +16,14 @@
 // ---------------------------------------------------------------------------
 
 import { requestedEvent } from "./event.js";
+import { authorizeOrganizer } from "./auth.js";
 const SB_URL = process.env.SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASSCODE = process.env.ORGANIZER_PASSCODE;
 const TABLE = "registrants";
 
 export default async function handler(req, res) {
-  if (!req.headers["x-organizer-key"] || req.headers["x-organizer-key"] !== PASSCODE) {
+  if (!(await authorizeOrganizer(req))) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 

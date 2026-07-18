@@ -14,10 +14,11 @@
 //                        isDefault (true → this event becomes the default).
 // ---------------------------------------------------------------------------
 import { requestedEvent, isValidSlug, DEFAULT_EVENT, urlParam } from "./event.js";
+import { authorizeOrganizer } from "./auth.js";
+import { writeEventSettings } from "./settings-write.js";
 
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const PASS = process.env.ORGANIZER_PASSCODE;
 const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
 
 // Only these ever leave the server on the public GET (lot_fee etc. stay private).
@@ -46,20 +47,22 @@ const COLOR_FIELDS = {
 };
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
-const gated = (req) => req.headers["x-organizer-key"] && req.headers["x-organizer-key"] === PASS;
-
 export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
-      // Organizer event list
+      // Organizer event list — a cross-event view, so MASTER key only.
       if (req.query?.list || urlParam(req, "list")) {
-        if (!gated(req)) return res.status(401).json({ error: "Unauthorized" });
+        if (!(await authorizeOrganizer(req, { masterOnly: true }))) return res.status(401).json({ error: "Unauthorized" });
         const r = await fetch(
-          `${SB}/rest/v1/event_settings?select=event_id,event_name,event_year,is_default&order=is_default.desc,event_year.desc,event_id.asc`,
+          `${SB}/rest/v1/event_settings?select=event_id,event_name,event_year,is_default,organizer_passcode&order=is_default.desc,event_year.desc,event_id.asc`,
           { headers: H }
         );
         if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
-        return res.status(200).json((await r.json()).filter((row) => row.event_id));
+        // Never leak the passcode value — only whether one is set.
+        const rows = (await r.json()).filter((row) => row.event_id).map(({ organizer_passcode, ...row }) => ({
+          ...row, has_passcode: !!organizer_passcode,
+        }));
+        return res.status(200).json(rows);
       }
 
       // Public branding for one event. No explicit param → the default event.
@@ -84,9 +87,20 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "PUT") {
-      if (!gated(req)) return res.status(401).json({ error: "Unauthorized" });
       const eventId = requestedEvent(req);
       const b = req.body || {};
+
+      // Does this event already exist? Creating a new event, changing the
+      // default, or setting a passcode are platform actions (MASTER key);
+      // editing an existing event's branding accepts that event's own key.
+      const existsR = await fetch(`${SB}/rest/v1/event_settings?event_id=eq.${encodeURIComponent(eventId)}&select=event_id&limit=1`, { headers: H });
+      if (!existsR.ok) throw new Error(`PostgREST ${existsR.status}: ${await existsR.text()}`);
+      const exists = (await existsR.json()).length > 0;
+      const wantsPrivileged = !exists || b.isDefault === true || "organizerPasscode" in b;
+      if (!(await authorizeOrganizer(req, { masterOnly: wantsPrivileged }))) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
       const patch = {};
       for (const [k, col] of Object.entries(FIELDS)) {
         if (k in b) patch[col] = b[k] === "" ? null : (b[k] ?? null);
@@ -113,16 +127,20 @@ export default async function handler(req, res) {
         if (!isFinite(y) || y < 2000 || y > 2100) return res.status(400).json({ error: "eventYear must be a 4-digit year" });
         patch.event_year = y;
       }
+      // Per-event passcode (write-only; never returned by any GET). Empty
+      // string clears it (that event falls back to the master key).
+      if ("organizerPasscode" in b) {
+        const pc = String(b.organizerPasscode || "").trim();
+        patch.organizer_passcode = pc.length ? pc : null;
+      }
       const makeDefault = b.isDefault === true;
       if (!Object.keys(patch).length && !makeDefault) return res.status(400).json({ error: "Nothing to update" });
-      patch.updated_at = new Date().toISOString();
 
-      const r = await fetch(`${SB}/rest/v1/event_settings?on_conflict=event_id`, {
-        method: "POST",
-        headers: { ...H, Prefer: "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ event_id: eventId, ...patch }),
-      });
-      if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
+      const w = await writeEventSettings(eventId, patch);
+      if (!w.ok) {
+        console.error("event-config write failed:", w.status, w.error);
+        return res.status(500).json({ error: "Could not save settings", detail: w.error });
+      }
 
       if (makeDefault) {
         // Exactly one default: clear the flag everywhere, then set it here.

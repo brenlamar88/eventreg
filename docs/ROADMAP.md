@@ -71,8 +71,15 @@ Many events on one deployment: event_settings keyed by slug, `?event=<slug>`
 on every page, event switcher + create + default on the Event Setup screen,
 all data (registrants/sponsors/packages/lots) scoped by event_id, wallet
 passes branded per event. Default event needs no param, so nothing changed
-for the current site. Still open as a follow-on: per-event organizer
-passcodes (today one passcode spans all events on the deployment).
+for the current site.
+
+### Per-event organizer passcodes (Phase F — DONE)
+Each event can carry its own organizer passcode (event_settings.
+organizer_passcode, write-only); the env ORGANIZER_PASSCODE is the master
+key that works everywhere and gates cross-event actions (list/create/
+default/set-passcode). Chapter staff get an event-scoped key that unlocks
+only their event. Shared auth helper (api/_lib/auth.js) gates all 11
+organizer endpoints; set the passcode on the Event Setup screen.
 
 ### Phase E — Money engine: consignor/buyer invoicing + payouts
 From the call: "day after the event, Jake Davis has 10 purchases — can he pay

@@ -5,6 +5,7 @@
 // DELETE → remove package (?id=<uuid>)
 // Gated by x-organizer-key header.
 import { requestedEvent } from "./event.js";
+import { authorizeOrganizer } from "./auth.js";
 const SB   = process.env.SUPABASE_URL;
 const KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -19,7 +20,7 @@ async function fail(res, r, label) {
 }
 
 export default async function handler(req, res) {
-  if (req.headers["x-organizer-key"] !== PASS) return res.status(401).json({ error: "Unauthorized" });
+  if (!(await authorizeOrganizer(req))) return res.status(401).json({ error: "Unauthorized" });
   try {
     if (req.method === "GET") {
       const r = await fetch(`${base()}?event_id=eq.${encodeURIComponent(requestedEvent(req))}&order=sort_order.asc,created_at.asc`, { headers: H });
