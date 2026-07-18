@@ -48,13 +48,15 @@ tooling; that triplet is the wedge.
   filter pills + SILENT badges in settlement; exports carry a Sale Type
   column.
 
-## Planned next (in order)
+### Phase C — Offline door (this PR)
+The "limited connectivity" requirement, delivered: service-worker app shell
+(the page loads with no internet), IndexedDB roster manifest, queued
+scan/walk-in/edit outbox, `/api/scan-batch` first-scan-wins reconciliation
+with per-op idempotency, conflicts surfaced to staff by name. Offline
+walk-ins work — Cvent OnArrival can't do that. Also fixed the index-based
+mutation races and the never-reconciling walk-in ids from the repo review.
 
-### Phase C — Offline door (already researched, next build)
-IndexedDB ticket manifest + queued scan/mutation outbox + batch
-reconciliation (first-scan-wins, conflicts surfaced), service-worker app
-shell. Beats Cvent OnArrival, which cannot do offline walk-ins. Also fixes
-the index-based mutation races found in review.
+## Planned next (in order)
 
 ### Phase D — White-label admin ("make it stupid simple to replicate")
 The call's CMS idea, done as config-not-code (no per-customer forks, no

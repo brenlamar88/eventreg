@@ -19,3 +19,11 @@ createRoot(document.getElementById("root")).render(
     <App />
   </React.StrictMode>
 );
+
+// Offline app shell for the door iPads: after one online visit, the page
+// itself loads with no connectivity (data + queued work live in IndexedDB).
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
