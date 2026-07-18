@@ -198,6 +198,33 @@ only reach that chapter's data:
   against the master key or the requested event's own passcode.
 - Run `db/phase-f.sql` once (after `db/phase-e.sql`).
 
+### Stripe Connect payouts + Billing (Phase I, env-gated)
+
+Two independent money flows, both managed per client organization on the
+**Platform Admin** screen (`/?app=platform`):
+
+- **Payouts (Stripe Connect Express)** — the platform collects each org's
+  ticket/auction money, keeps your platform fee, and pays out the rest to the
+  org's own connected account. Click **"Set up payouts"** on an org → Stripe's
+  onboarding runs (they verify identity) → once ready, registration checkouts
+  for that org's events become **destination charges** with your fee taken
+  automatically.
+- **Subscription (Stripe Billing)** — your flat platform fee to the org.
+  Click **"Start subscription"** → Stripe Checkout in subscription mode.
+
+Run `db/phase-i.sql` once (after `db/phase-h.sql`). Then in Vercel:
+
+| Variable | For | Value |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | both | your **platform** account secret (already set for checkout); enable **Connect** on this account in the Stripe dashboard |
+| `PLATFORM_FEE_PCT` | payouts | default platform fee fraction, e.g. `0.05` for 5% (per-org override lives on the org row) |
+| `PLATFORM_FEE_FLAT_CENTS` | payouts | optional flat per-charge fee in cents, e.g. `100` |
+| `STRIPE_PRICE_ID` | billing | the recurring Price id for your plan (create it in Stripe → Products) |
+| `PUBLIC_BASE_URL` | both | your deployed URL (already set) |
+
+Until these exist the buttons return a friendly "not configured" message and
+all checkouts stay on the platform account — nothing else changes.
+
 ### Wallet passes (optional, env-gated)
 
 The **Add to Apple Wallet / Google Wallet** buttons appear automatically once

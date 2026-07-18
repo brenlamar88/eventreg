@@ -20,16 +20,18 @@ export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
       const r = await fetch(
-        `${SB}/rest/v1/organizations?select=id,slug,name,plan,status,contact_email,owner_passcode,stripe_account_id,stripe_customer_id,created_at,event_settings(event_id)&order=created_at.asc`,
+        `${SB}/rest/v1/organizations?select=id,slug,name,plan,status,contact_email,owner_passcode,stripe_account_id,stripe_payouts_enabled,stripe_customer_id,subscription_status,created_at,event_settings(event_id)&order=created_at.asc`,
         { headers: H }
       );
       if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
-      // Strip secrets; expose only booleans.
-      const rows = (await r.json()).map(({ owner_passcode, stripe_account_id, stripe_customer_id, event_settings, ...o }) => ({
+      // Strip secrets; expose only booleans/status.
+      const rows = (await r.json()).map(({ owner_passcode, stripe_account_id, stripe_customer_id, stripe_payouts_enabled, subscription_status, event_settings, ...o }) => ({
         ...o,
         has_passcode: !!owner_passcode,
         stripe_connected: !!stripe_account_id,
-        billing_active: !!stripe_customer_id,
+        payouts_enabled: !!stripe_payouts_enabled,
+        billing_active: subscription_status === "active" || subscription_status === "trialing",
+        subscription_status: subscription_status || null,
         event_count: Array.isArray(event_settings) ? event_settings.length : 0,
       }));
       return res.status(200).json(rows);

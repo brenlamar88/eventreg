@@ -49,9 +49,13 @@ through `event_id → org_id`.
    subdomain (or a custom domain via a `domains` table) → `org_id`, verified
    server-side from the Host header. One `resolveTenant()` so subdomain ↔ path
    is swappable; BYO-domain as a later upsell.
-5. **Billing.** Stripe Billing subscription per org (your fee) + Stripe Connect
-   Express onboarding per org and destination charges with an application fee
-   (their revenue). Store `stripe_account_id` on the org.
+5. **Billing.** ✅ DONE (Phase I, `db/phase-i.sql`). Stripe Connect Express
+   onboarding per org + destination charges with an application fee on
+   registration checkout (their revenue → their payout, minus your fee);
+   Stripe Billing subscription per org (your flat fee). Managed on the
+   Platform Admin screen; env-gated on `STRIPE_SECRET_KEY` / `STRIPE_PRICE_ID`.
+   Still open: routing auction lot-checkout through Connect too, and
+   subscription-status webhooks for real-time billing state.
 
 Stages 1–2 are the foundation and are mostly additive/reversible. Stages 4–5
 carry real business decisions (pricing model, subdomains, Connect) and some
