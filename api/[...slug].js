@@ -49,9 +49,21 @@ const ROUTES = {
 };
 
 export default async function handler(req, res) {
-  const slug = req.query?.slug;
-  const parts = Array.isArray(slug) ? slug : slug ? [slug] : [];
-  const route = ROUTES[parts[0]];
-  if (!route || parts.length !== 1) return res.status(404).json({ error: "Not found" });
+  // Resolve the route from the URL itself — bare (non-Next.js) Vercel
+  // functions don't reliably populate req.query for catch-all segments, and
+  // the URL is authoritative anyway. /api/<name> with nothing nested.
+  let name = "";
+  try {
+    const path = decodeURIComponent((req.url || "").split("?")[0]);
+    const m = /^\/api\/([^/]+)\/?$/.exec(path);
+    if (m) name = m[1];
+  } catch { /* fall through to 404 */ }
+  if (!name) {
+    const slug = req.query?.slug;
+    const parts = Array.isArray(slug) ? slug : slug ? [slug] : [];
+    if (parts.length === 1) name = parts[0];
+  }
+  const route = ROUTES[name];
+  if (!route) return res.status(404).json({ error: "Not found" });
   return route(req, res);
 }
