@@ -5,14 +5,14 @@ import {
   Upload, Heart, LayoutGrid, Ticket, Database, RefreshCw, AlertTriangle,
   ScanLine, CreditCard, FileText,
 } from "lucide-react";
-import OrganizerNav from "./OrganizerNav.jsx";
 import TicketQR from "./TicketQR.jsx";
+import AdminShell from "./AdminShell.jsx";
 import { DEMO_REGISTRANTS, DEMO_SPONSORS } from "./demoData.js";
 import {
   saveManifest, manifestAll, manifestByToken, manifestPatch, manifestPut,
   queueOp, pendingCount, getMeta, fetchT, flushOutbox,
 } from "./offline.js";
-import { getEventConfig, withEvent, eventLink } from "./eventConfig.js";
+import { getEventConfig, withEvent, eventLink, getAdminKey, setAdminKey } from "./eventConfig.js";
 
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_DEMO = URL_PARAMS.get("demo") === "true";
@@ -817,7 +817,11 @@ function RegisterStation() {
 
 /* ============================================================================ */
 export default function BoilOnTheBend() {
-  const [view, setView] = useState("register");
+  // "register" is the public attendee flow; "door" and "admin" are organizer
+  // surfaces reached from the sidebar (?view=door / ?view=admin), which render
+  // inside AdminShell.
+  const initialView = ["door", "admin"].includes(URL_PARAMS.get("view")) ? URL_PARAMS.get("view") : "register";
+  const [view, setView] = useState(initialView);
   const [step, setStep] = useState(-1);
   const [attendees, setAttendees] = useState([blankAtt()]);
   const [donation, setDonation] = useState(0);
@@ -844,7 +848,7 @@ export default function BoilOnTheBend() {
   const [search, setSearch] = useState("");
   const [importText, setImportText] = useState("");
   const [importMsg, setImportMsg] = useState("");
-  const [passcode, setPasscode] = useState("");
+  const [passcode, setPasscode] = useState(getAdminKey());
   const [dbState, setDbState] = useState("idle"); // idle | loading | live | offline
   const [dbMsg, setDbMsg] = useState("");
 
@@ -1038,8 +1042,9 @@ export default function BoilOnTheBend() {
       const rows = await r.json();
       setRoster(rows.map(dbRowToUI));
       // This passcode just proved itself against the server — it's the one an
-      // offline unlock may trust later. (Stored only on success, on purpose.)
+      // offline unlock may trust later, and the shared organizer session key.
       sessionStorage.setItem("doorKey", pc);
+      setAdminKey(pc);
       saveManifest(rows);
       refreshPending();
       setDbState("live"); setDbMsg(`Loaded ${rows.length} registrant${rows.length === 1 ? "" : "s"} from yellow-kite.`);
@@ -1159,15 +1164,14 @@ export default function BoilOnTheBend() {
   const checkedIn = roster.filter((p) => p.checkedIn).length;
   const revenue = roster.reduce((s, p) => s + (p.amount || 0), 0);
 
-  const UtilBar = () => (
+  // Public (attendee-facing) header. Deliberately carries NO admin controls —
+  // guests see only the event identity and a discreet organizer sign-in link.
+  const PublicHeader = () => (
     <div className="util"><div className="wrap util-in">
       <span className="brandtag">{EVENT.org}</span>
-      <div className="vtoggle">
-        <button className={view === "register" ? "on" : ""} onClick={() => setView("register")}><Ticket size={15} /> Register</button>
-        <button className={view === "door" ? "on" : ""} onClick={() => setView("door")}><ScanLine size={15} /> Door</button>
-        <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}><LayoutGrid size={15} /> Organizer</button>
-        <button onClick={() => window.location.href = eventLink("/?app=settlement")} style={{ borderLeft: "1px solid #23604A", marginLeft: 4, paddingLeft: 12 }}><FileText size={15} /> Ledger</button>
-      </div>
+      <a href={eventLink("/?view=admin")} style={{ color: "#9DB3A8", fontSize: 12.5, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <Lock size={13} /> Organizer sign in
+      </a>
     </div></div>
   );
 
@@ -1242,7 +1246,7 @@ export default function BoilOnTheBend() {
     };
 
     return (
-      <div className="mrd"><Styles /><UtilBar />
+      <AdminShell active="door"><div className="mrd" style={{ minHeight: "auto" }}><Styles />
         <div className="wrap panel anim">
           <div className="section-h">Door</div>
           <h2 className="section-t mrd-serif">Check-In &amp; Walk-Ins</h2>
@@ -1491,19 +1495,19 @@ export default function BoilOnTheBend() {
             </>
           )}
         </div>
-      </div>
+      </div></AdminShell>
     );
   }
 
-  /* ---------- ORGANIZER ---------- */
+  /* ---------- ORGANIZER (roster) ---------- */
   if (view === "admin") {
     const dotColor = dbState === "live" ? "var(--ok)" : dbState === "offline" ? "var(--warn)" : "#9DB3A8";
     return (
-      <div className="mrd"><Styles /><UtilBar />
+      <AdminShell active="roster"><div className="mrd" style={{ minHeight: "auto" }}><Styles />
         <div className="wrap panel anim">
-          <div className="section-h">Organizer</div>
+          <div className="section-h">Registrations</div>
           <h2 className="section-t mrd-serif">{EVENT.name} — Registrants</h2>
-          <p className="section-d">Live from Supabase (yellow-kite). Enter the organizer passcode to load the roster.</p>
+          <p className="section-d">Enter the organizer passcode to load the roster.</p>
 
           {IS_DEMO && (
             <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
@@ -1584,14 +1588,14 @@ export default function BoilOnTheBend() {
             </tbody>
           </table>
         </div>
-      </div>
+      </div></AdminShell>
     );
   }
 
-  /* ---------- HERO ---------- */
+  /* ---------- HERO (public) ---------- */
   if (step === -1) {
     return (
-      <div className="mrd"><Styles /><UtilBar />
+      <div className="mrd"><Styles /><PublicHeader />
         <header className="hero"><div className="grain" /><div className="wrap hero-in">
           {EVENT.logoUrl && <img src={EVENT.logoUrl} alt={`${EVENT.org} logo`} style={{ maxHeight: 64, maxWidth: 220, marginBottom: 16, display: "block" }} />}
           <div className="eyebrow">{EVENT.org}</div>
@@ -1610,7 +1614,7 @@ export default function BoilOnTheBend() {
     const a = attendees[0];
     const token = ticket?.token || null;
     return (
-      <div className="mrd"><Styles /><UtilBar />
+      <div className="mrd"><Styles /><PublicHeader />
         <div className="wrap"><div className="conf anim">
           <div className="badge"><Check size={36} strokeWidth={3} /></div>
           <h2 className="mrd-serif">You're in!</h2>
@@ -1644,7 +1648,7 @@ export default function BoilOnTheBend() {
   /* ---------- WIZARD ---------- */
   const STEPS = ["Tickets", "Guests", "Checkout"];
   return (
-    <div className="mrd"><Styles /><OrganizerNav /><UtilBar />
+    <div className="mrd"><Styles /><PublicHeader />
       <div className="stepbar"><div className="wrap steps">
         {STEPS.map((l, i) => (<div key={l} className={`stp ${i === step ? "active" : i < step ? "done" : ""}`}><span className="num">{i < step ? <Check size={13} strokeWidth={3} /> : i + 1}</span>{l}</div>))}
       </div></div>

@@ -3,9 +3,9 @@ import {
   Plus, Trash2, Settings, Database, AlertTriangle, Check, X,
   Pencil, DollarSign, Users, Image, ChevronDown, ChevronUp, Download,
 } from "lucide-react";
-import OrganizerNav from "./OrganizerNav.jsx";
+import AdminShell from "./AdminShell.jsx";
 import { DEMO_SPONSORS } from "./demoData.js";
-import { getEventConfig, withEvent } from "./eventConfig.js";
+import { getEventConfig, withEvent, setAdminKey, getAdminKey } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 const CFG = getEventConfig();
@@ -185,7 +185,7 @@ const DEMO_PACKAGES = [
 
 export default function Sponsorships() {
   const [sponsors, setSponsors] = useState([]);
-  const [passcode, setPasscode] = useState("");
+  const [passcode, setPasscode] = useState(getAdminKey());
   const [db, setDb] = useState("idle");
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState(blankForm);
@@ -223,6 +223,7 @@ export default function Sponsorships() {
         const pr = await fetch(withEvent("/api/sponsor-packages"), { headers: hdr() });
         if (pr.ok) { const pd = await pr.json(); setPackages(Array.isArray(pd) ? pd.map(pkgDbToUI) : []); }
       } catch {}
+      setAdminKey(passcode);
       setDb("live");
       setMsg(`Connected — ${Array.isArray(data) ? data.length : 0} sponsor${data.length === 1 ? "" : "s"} loaded.`);
     } catch (e) {
@@ -409,7 +410,7 @@ export default function Sponsorships() {
   }, [sponsors, packages]);
 
   return (
-    <div className="spo"><Styles /><OrganizerNav />
+    <AdminShell active="sponsorships"><div className="spo"><Styles />
       <div className="head"><div className="wrap head-in">
         <div className="eyebrow">{`${CFG.orgName} · 2026`}</div>
         <h1 className="serif">Sponsorship Management</h1>
@@ -698,6 +699,6 @@ export default function Sponsorships() {
           </div>
         </>)}
       </div>
-    </div>
+    </div></AdminShell>
   );
 }
