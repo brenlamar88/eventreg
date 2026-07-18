@@ -125,6 +125,26 @@ stations **once while online** on each iPad; from then on:
 - Scope: each device queues its own work; devices see each other's changes
   once connectivity returns. Card payments require connectivity (Stripe).
 
+### White-label Event Setup (Phase D)
+
+The event's branding, copy, and pricing are **config, not code**. Open
+**`/?app=setup`** (also linked in the organizer nav), connect with the
+organizer passcode, and edit:
+
+- Event name, association name, short name (used in copy), tagline, date
+  label, venue, city
+- Ticket name + price, suggested donation amounts
+- Brand colors (primary, primary-dark, accent, background) with a live
+  preview — every page derives its full palette from these four
+- Logo upload (shows on the landing page, ticket pages, and organizer nav)
+
+Empty fields fall back to the built-in Boil on the Bend defaults, so nothing
+changes until you customize. Apple/Google Wallet passes pick up the event
+name, org name, and colors automatically. A new customer = run the SQL, set
+the env vars, fill in Event Setup — no code changes, no fork.
+
+Run `db/phase-d.sql` once in the Supabase SQL editor (after `db/phase-c.sql`).
+
 ### Wallet passes (optional, env-gated)
 
 The **Add to Apple Wallet / Google Wallet** buttons appear automatically once

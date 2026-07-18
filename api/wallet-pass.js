@@ -25,6 +25,31 @@ const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const FALLBACK_ICON =
   "iVBORw0KGgoAAAANSUhEUgAAADoAAAA6CAIAAABu2d1/AAAATUlEQVR4nO3OQQ0AMAgEMGTgYv/5FzYL+x0kTSqg1fcsUvGB7hi6urq6urq6urppurq6urq6urq6abq6urq6urq6umm6urq6urq6uj8egXuffz+vBMcAAAAASUVORK5CYII=";
 
+// White-label branding from event_settings (Event Setup screen); falls back
+// to the built-in defaults when unset or unreachable.
+const BRAND_DEFAULTS = { eventName: "Boil on the Bend", orgName: "Boil on the Bend", primary: "#183A2F", accent: "#C9A24D" };
+async function getBranding() {
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/event_settings?event_year=eq.2026&select=event_name,org_name,color_primary,color_accent&limit=1`, {
+      headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+    });
+    if (!r.ok) return BRAND_DEFAULTS;
+    const row = (await r.json())[0] || {};
+    return {
+      eventName: row.event_name || BRAND_DEFAULTS.eventName,
+      orgName: row.org_name || row.event_name || BRAND_DEFAULTS.orgName,
+      primary: row.color_primary || BRAND_DEFAULTS.primary,
+      accent: row.color_accent || BRAND_DEFAULTS.accent,
+    };
+  } catch { return BRAND_DEFAULTS; }
+}
+function hexToRgb(hex) {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex || "");
+  if (!m) return "rgb(24,58,47)";
+  const n = parseInt(m[1], 16);
+  return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`;
+}
+
 function walletEnv() {
   const { APPLE_PASS_TYPE_ID, APPLE_TEAM_ID, APPLE_PASS_CERT, APPLE_PASS_KEY, APPLE_WWDR_CERT } = process.env;
   if (!APPLE_PASS_TYPE_ID || !APPLE_TEAM_ID || !APPLE_PASS_CERT || !APPLE_PASS_KEY || !APPLE_WWDR_CERT) return null;
@@ -66,19 +91,20 @@ export default async function handler(req, res) {
     const t = rows[0];
 
     const { PKPass } = await import("passkit-generator");
+    const brand = await getBranding();
 
     const passJson = {
       formatVersion: 1,
       passTypeIdentifier: cfg.passTypeIdentifier,
       teamIdentifier: cfg.teamIdentifier,
       serialNumber: t.ticket_token,
-      organizationName: "Boil on the Bend",
-      description: "Boil on the Bend — Admission",
-      backgroundColor: "rgb(24,58,47)",   // pine
-      foregroundColor: "rgb(247,243,233)", // bone
-      labelColor: "rgb(201,162,77)",       // gold
+      organizationName: brand.orgName,
+      description: `${brand.eventName} — Admission`,
+      backgroundColor: hexToRgb(brand.primary),
+      foregroundColor: "rgb(247,243,233)",
+      labelColor: hexToRgb(brand.accent),
       eventTicket: {
-        primaryFields: [{ key: "event", label: "EVENT", value: "Boil on the Bend" }],
+        primaryFields: [{ key: "event", label: "EVENT", value: brand.eventName }],
         secondaryFields: [
           { key: "name", label: "NAME", value: t.name || "Guest" },
           { key: "party", label: "PARTY OF", value: String(t.party || 1) },

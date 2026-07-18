@@ -1,9 +1,11 @@
 import React from "react";
+import { getEventConfig } from "./eventConfig.js";
 
 const links = [
   { label: "Registration", href: "/", app: null },
   { label: "Auction Settlement", href: "/?app=settlement", app: "settlement" },
   { label: "Sponsorships", href: "/?app=sponsorships", app: "sponsorships" },
+  { label: "Event Setup", href: "/?app=setup", app: "setup" },
 ];
 
 const current = new URLSearchParams(window.location.search).get("app");
@@ -11,11 +13,11 @@ const current = new URLSearchParams(window.location.search).get("app");
 export default function OrganizerNav() {
   return (
     <nav style={{
-      background: "#0C2A20", borderBottom: "1px solid rgba(255,255,255,.1)",
+      background: "var(--pine2)", borderBottom: "1px solid rgba(255,255,255,.1)",
       display: "flex", alignItems: "center", gap: 4, padding: "0 22px",
       fontFamily: "'Hanken Grotesk',ui-sans-serif,system-ui", flexWrap: "wrap",
     }}>
-      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", color: "#B9842B", marginRight: 10, padding: "12px 0" }}>EWA 2026</span>
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", color: "var(--gold)", marginRight: 10, padding: "12px 0" }}>{getEventConfig().orgShort} 2026</span>
       {links.map(({ label, href, app }) => {
         const active = app === current;
         return (
@@ -25,7 +27,7 @@ export default function OrganizerNav() {
             fontSize: 13,
             padding: "12px 14px",
             textDecoration: "none",
-            borderBottom: active ? "2px solid #B9842B" : "2px solid transparent",
+            borderBottom: active ? "2px solid var(--gold)" : "2px solid transparent",
             display: "inline-block",
             transition: "color .15s",
           }}

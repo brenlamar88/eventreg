@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Check, CheckCircle2, AlertTriangle, Calendar, MapPin } from "lucide-react";
 import TicketQR from "./TicketQR.jsx";
+import { getEventConfig } from "./eventConfig.js";
 
 /* ============================================================================
    Public ticket page — /?ticket=<token>
@@ -10,12 +11,14 @@ import TicketQR from "./TicketQR.jsx";
    and check-in status. Nothing else about the roster is reachable from here.
    ========================================================================== */
 
+const CFG = getEventConfig();
 const EVENT = {
-  name: "Boil on the Bend",
-  org: "Exotic Wildlife Association of Louisiana",
-  dateLabel: "Saturday · Date TBD",
-  venue: "On the Bend",
-  city: "Louisiana",
+  name: CFG.eventName,
+  org: CFG.orgName,
+  dateLabel: CFG.dateLabel,
+  venue: CFG.venue,
+  city: CFG.city,
+  logoUrl: CFG.logoUrl,
 };
 
 const Styles = () => (
@@ -75,6 +78,7 @@ export default function TicketPage() {
     <div className="tkt-page"><Styles />
       <div className="tkt-head">{EVENT.org}</div>
       <div className="tkt-wrap">
+        {EVENT.logoUrl && <img src={EVENT.logoUrl} alt={`${EVENT.org} logo`} style={{ maxHeight: 56, maxWidth: 200, margin: "0 auto 14px", display: "block" }} />}
         <h1 className="tkt-title">{EVENT.name}</h1>
         <div className="tkt-meta">
           <div><Calendar size={15} /> {EVENT.dateLabel}</div>

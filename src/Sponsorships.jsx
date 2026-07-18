@@ -5,8 +5,10 @@ import {
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
 import { DEMO_SPONSORS } from "./demoData.js";
+import { getEventConfig } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
+const CFG = getEventConfig();
 
 const TIERS = [
   { name: "Presenting",  amount: 15000, color: "#7B61FF" },
@@ -90,7 +92,7 @@ const Styles = () => (
     .spo{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
     .serif{font-family:'Fraunces',Georgia,serif;}
     .wrap{max-width:1200px;margin:0 auto;padding:0 22px;}
-    .head{background:linear-gradient(160deg,#123C2E,#0C2A20);color:#EAF1EC;}
+    .head{background:linear-gradient(160deg,var(--pine),var(--pine2));color:#EAF1EC;}
     .head-in{padding:30px 0 0;}
     .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
     .head h1{font-family:'Fraunces',serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
@@ -409,7 +411,7 @@ export default function Sponsorships() {
   return (
     <div className="spo"><Styles /><OrganizerNav />
       <div className="head"><div className="wrap head-in">
-        <div className="eyebrow">Exotic Wildlife Association · 2026 Annual Membership Meeting</div>
+        <div className="eyebrow">{`${CFG.orgName} · 2026`}</div>
         <h1 className="serif">Sponsorship Management</h1>
         <div className="sub">Track sponsors, tiers, payments, and artwork</div>
       </div></div>
