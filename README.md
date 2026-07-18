@@ -52,6 +52,14 @@ ticket can never check in twice, even from two devices at once.
 
 ### One-time setup
 
+> **Fresh Supabase project?** Run **`db/phase-0-bootstrap.sql`** first — it
+> creates the base tables (registrants, sponsors, lots, event_settings) with
+> the insert-only RLS policy for the publishable key. It's a guarded no-op on
+> a project that already has them, so when in doubt, run it. Full order:
+> phase-0 → phase-a → phase-b → phase-c → phase-d. If you see
+> `relation "registrants" does not exist`, you're either in the wrong
+> Supabase project or need this bootstrap.
+
 1. Run **`db/phase-a.sql`** in the Supabase SQL editor (Dashboard → SQL
    Editor). It adds `ticket_token` / `checked_in_at` to `registrants`, makes
    the Stripe webhook idempotent (unique `stripe_session_id`), creates the
