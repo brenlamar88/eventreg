@@ -16,6 +16,7 @@
 import { requestedEvent, isValidSlug, DEFAULT_EVENT, urlParam } from "./event.js";
 import { authorizeOrganizer } from "./auth.js";
 import { writeEventSettings } from "./settings-write.js";
+import { orgBySlug } from "./org.js";
 
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -50,11 +51,22 @@ const HEX = /^#[0-9a-fA-F]{6}$/;
 export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
-      // Organizer event list — a cross-event view, so MASTER key only.
+      // Organizer event list. All-events is a cross-org view (MASTER only);
+      // scoping with ?client=<slug> lets that org's owner list just theirs.
       if (req.query?.list || urlParam(req, "list")) {
-        if (!(await authorizeOrganizer(req, { masterOnly: true }))) return res.status(401).json({ error: "Unauthorized" });
+        const slug = String(req.query?.client || urlParam(req, "client") || "").trim().toLowerCase();
+        // ?client= → org owner (or master) may list that org's events;
+        // otherwise the full list is master-only.
+        const ok = slug ? await authorizeOrganizer(req) : await authorizeOrganizer(req, { masterOnly: true });
+        if (!ok) return res.status(401).json({ error: "Unauthorized" });
+        let filter = "";
+        if (slug) {
+          const org = await orgBySlug(slug);
+          if (!org) return res.status(404).json({ error: "Unknown organization" });
+          filter = `&org_id=eq.${org.id}`;
+        }
         const r = await fetch(
-          `${SB}/rest/v1/event_settings?select=event_id,event_name,event_year,is_default,organizer_passcode&order=is_default.desc,event_year.desc,event_id.asc`,
+          `${SB}/rest/v1/event_settings?select=event_id,event_name,event_year,is_default,organizer_passcode,org_id&order=is_default.desc,event_year.desc,event_id.asc${filter}`,
           { headers: H }
         );
         if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
@@ -96,7 +108,7 @@ export default async function handler(req, res) {
       const existsR = await fetch(`${SB}/rest/v1/event_settings?event_id=eq.${encodeURIComponent(eventId)}&select=event_id&limit=1`, { headers: H });
       if (!existsR.ok) throw new Error(`PostgREST ${existsR.status}: ${await existsR.text()}`);
       const exists = (await existsR.json()).length > 0;
-      const wantsPrivileged = !exists || b.isDefault === true || "organizerPasscode" in b;
+      const wantsPrivileged = !exists || b.isDefault === true || "organizerPasscode" in b || "orgSlug" in b;
       if (!(await authorizeOrganizer(req, { masterOnly: wantsPrivileged }))) {
         return res.status(401).json({ error: "Unauthorized" });
       }
@@ -132,6 +144,12 @@ export default async function handler(req, res) {
       if ("organizerPasscode" in b) {
         const pc = String(b.organizerPasscode || "").trim();
         patch.organizer_passcode = pc.length ? pc : null;
+      }
+      // Assign this event to a client organization (master-only, above).
+      if ("orgSlug" in b) {
+        const org = await orgBySlug(String(b.orgSlug || "").trim().toLowerCase());
+        if (!org) return res.status(400).json({ error: "Unknown organization slug" });
+        patch.org_id = org.id;
       }
       const makeDefault = b.isDefault === true;
       if (!Object.keys(patch).length && !makeDefault) return res.status(400).json({ error: "Nothing to update" });

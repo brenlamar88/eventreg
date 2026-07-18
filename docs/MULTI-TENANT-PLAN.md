@@ -31,8 +31,13 @@ through `event_id → org_id`.
 
 ## Build stages (each shippable, in order)
 
-1. **Tenancy core (DB).** `organizations`, `memberships(user_id, org_id, role)`,
-   `invitations` tables; `org_id` on `events`; backfill one org for you as owner.
+1. **Tenancy core (DB).** ✅ DONE (Phase H, `db/phase-h.sql`). `organizations`
+   table + `org_id` on events; all existing events assigned to a seeded
+   "house" org; three-tier auth (platform master → org owner passcode → event
+   passcode); `/api/organizations` CRUD; a **Platform Admin** screen
+   (`/?app=platform`) to create client orgs and set their owner passcode.
+   (Real Supabase Auth logins + `memberships`/`invitations` replace the
+   passcode tiers in a later stage; the passcode model is the interim.)
 2. **Auth + RLS.** Supabase Auth login; enable RLS on every tenant table with
    policies keyed on membership (join through `event_id → org_id`); index
    `org_id`/`event_id`; keep the service-role key server-only. Replaces the
