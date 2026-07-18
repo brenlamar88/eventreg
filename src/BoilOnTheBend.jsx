@@ -12,6 +12,7 @@ import {
   saveManifest, manifestAll, manifestByToken, manifestPatch, manifestPut,
   queueOp, pendingCount, getMeta, fetchT, flushOutbox,
 } from "./offline.js";
+import { getEventConfig } from "./eventConfig.js";
 
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_DEMO = URL_PARAMS.get("demo") === "true";
@@ -20,18 +21,24 @@ const IS_DEMO = URL_PARAMS.get("demo") === "true";
 const STATION = URL_PARAMS.get("station");
 
 /* ============================================================================
-   1. EVENT CONFIG
+   1. EVENT CONFIG — white-label. Everything here is edited on the Event Setup
+   screen (/?app=setup) and served by /api/event-config; the defaults are the
+   original Boil on the Bend values. main.jsx resolves the config BEFORE this
+   module is imported, so module-level reads are safe.
    ========================================================================== */
+const CFG = getEventConfig();
 const EVENT = {
-  name: "Boil on the Bend",          // ← if spelled "Boyle," change this one line
-  org: "Exotic Wildlife Association of Louisiana",
-  tagline: "An evening on the bayou — crawfish, cold drinks, and good company in support of EWA-LA.",
-  dateLabel: "Saturday · Date TBD",
-  venue: "On the Bend",
-  city: "Louisiana",
+  name: CFG.eventName,
+  org: CFG.orgName,
+  orgShort: CFG.orgShort,
+  tagline: CFG.tagline,
+  dateLabel: CFG.dateLabel,
+  venue: CFG.venue,
+  city: CFG.city,
+  logoUrl: CFG.logoUrl,
 };
-const TICKET = { id: "boil85", name: "Boil on the Bend — Admission", price: 85 };
-const SUGGESTED_DONATIONS = [25, 50, 100];
+const TICKET = { id: CFG.eventId, name: CFG.ticketName, price: CFG.ticketPrice };
+const SUGGESTED_DONATIONS = CFG.donationPresets;
 
 /* ============================================================================
    2. SUPABASE  (project: yellow-kite)
@@ -206,7 +213,7 @@ const Styles = () => (
     .vtoggle{display:flex;gap:4px;background:#0a2118;border-radius:999px;padding:4px;}
     .vtoggle button{font-family:inherit;border:none;background:transparent;color:#9DB3A8;font-weight:600;font-size:13px;padding:7px 15px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px;}
     .vtoggle button.on{background:var(--gold);color:#1b1407;}
-    .hero{position:relative;overflow:hidden;color:#F4EFE6;background:radial-gradient(120% 90% at 12% 0%,#1c5340 0%,rgba(18,60,46,0) 55%),radial-gradient(120% 120% at 100% 0%,#0a261c 0%,rgba(10,38,28,0) 60%),linear-gradient(160deg,#123C2E,#0C2A20);}
+    .hero{position:relative;overflow:hidden;color:var(--bone);background:radial-gradient(120% 90% at 12% 0%,var(--pineLine) 0%,transparent 55%),radial-gradient(120% 120% at 100% 0%,var(--pine2) 0%,transparent 60%),linear-gradient(160deg,var(--pine),var(--pine2));}
     .hero-in{position:relative;z-index:2;padding:64px 0 58px;}
     .eyebrow{font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
     .hero h1{font-size:clamp(40px,7vw,78px);line-height:.96;margin:14px 0 0;font-weight:600;letter-spacing:-.02em;}
@@ -881,7 +888,7 @@ export default function BoilOnTheBend() {
   const total = ticketsTotal + (Number(donation) || 0);
   const lineItems = useMemo(() => {
     const items = [{ name: TICKET.name, sub: `${qty} × ${money(TICKET.price)}`, amount: ticketsTotal }];
-    if (donation > 0) items.push({ name: "Donation to EWA-LA", sub: "Thank you!", amount: Number(donation) });
+    if (donation > 0) items.push({ name: `Donation to ${EVENT.orgShort}`, sub: "Thank you!", amount: Number(donation) });
     return items;
   }, [qty, ticketsTotal, donation]);
 
@@ -1582,6 +1589,7 @@ export default function BoilOnTheBend() {
     return (
       <div className="mrd"><Styles /><UtilBar />
         <header className="hero"><div className="grain" /><div className="wrap hero-in">
+          {EVENT.logoUrl && <img src={EVENT.logoUrl} alt={`${EVENT.org} logo`} style={{ maxHeight: 64, maxWidth: 220, marginBottom: 16, display: "block" }} />}
           <div className="eyebrow">{EVENT.org}</div>
           <h1 className="mrd-serif">{EVENT.name}</h1>
           <p className="hero-sub">{EVENT.tagline}</p>
@@ -1654,7 +1662,7 @@ export default function BoilOnTheBend() {
               <div className="qty"><button onClick={() => setQty(qty - 1)} disabled={qty <= 1}><Minus size={17} /></button><span>{qty}</span><button onClick={() => setQty(qty + 1)}><Plus size={17} /></button></div>
             </div>
             <div className="dona">
-              <div className="dona-h"><Heart size={17} color="var(--gold)" /> Add a donation to EWA-LA <span style={{ fontWeight: 500, color: "var(--inkSoft)", fontSize: 13 }}>(optional)</span></div>
+              <div className="dona-h"><Heart size={17} color="var(--gold)" /> Add a donation to {EVENT.orgShort} <span style={{ fontWeight: 500, color: "var(--inkSoft)", fontSize: 13 }}>(optional)</span></div>
               <div className="dchips">
                 {SUGGESTED_DONATIONS.map((d) => <button key={d} className={`dchip ${donation === d && !donationCustom ? "on" : ""}`} onClick={() => pickDonation(d)}>{money(d).replace(".00", "")}</button>)}
                 <button className={`dchip ${donation === 0 && !donationCustom ? "on" : ""}`} onClick={() => pickDonation(0)}>None</button>

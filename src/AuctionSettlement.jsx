@@ -6,8 +6,10 @@ import {
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
 import { DEMO_LOTS, DEMO_PEOPLE, DEMO_REGISTRANTS, DEMO_SPONSORS, DEMO_LOT_FEE } from "./demoData.js";
+import { getEventConfig } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
+const CFG = getEventConfig();
 
 /* ============================================================================
    BUSINESS RULES
@@ -64,7 +66,7 @@ const Styles = () => (
     .ewa{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
     .serif{font-family:'Fraunces',Georgia,serif;}
     .wrap{max-width:1180px;margin:0 auto;padding:0 22px;}
-    .head{background:linear-gradient(160deg,#123C2E,#0C2A20);color:#EAF1EC;}
+    .head{background:linear-gradient(160deg,var(--pine),var(--pine2));color:#EAF1EC;}
     .head-in{padding:30px 0 0;}
     .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
     .head h1{font-family:'Fraunces',serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
@@ -408,7 +410,7 @@ export default function AuctionSettlement() {
     <div className="ewa"><Styles /><OrganizerNav />
       <datalist id="people-list">{people.map((p) => <option key={p.name} value={p.bidderNo ? `#${p.bidderNo} - ${p.name}` : p.name} />)}</datalist>
       <div className="head"><div className="wrap head-in">
-        <div className="eyebrow">Exotic Wildlife Association · 2026 Annual Membership Meeting</div>
+        <div className="eyebrow">{`${CFG.orgName} · 2026`}</div>
         <h1 className="serif">Auction Settlement</h1>
         <div className="sub">Consignor payouts, ledgers, and delivery tracking</div>
         <div className="tabs">
@@ -442,7 +444,7 @@ export default function AuctionSettlement() {
           <div className="cards">
             <div className="kpi"><div className="l"><Receipt size={13} /> Lot total</div><div className="n">{money0(grand.lotTotal)}</div></div>
             <div className="kpi"><div className="l"><FileText size={13} /> Lot fees</div><div className="n">{money0(grand.fees)}</div></div>
-            <div className="kpi"><div className="l"><Landmark size={13} /> EWA commission</div><div className="n">{money0(grand.commission)}</div></div>
+            <div className="kpi"><div className="l"><Landmark size={13} /> {CFG.orgShort} commission</div><div className="n">{money0(grand.commission)}</div></div>
             <div className="kpi accent"><div className="l"><DollarSign size={13} /> Net to consignors</div><div className="n">{money0(grand.net)}</div></div>
             <div className="kpi"><div className="l"><Truck size={13} /> Delivered / Paid</div><div className="n">{deliveredCount} / {paidCount}</div></div>
           </div>
@@ -459,7 +461,7 @@ export default function AuctionSettlement() {
               <div className="f span4"><label>Buyer name</label><input list="people-list" value={form.buyerName} onChange={(e) => onNameChange("buyer", e.target.value)} placeholder="Start typing…" /></div>
               <div className="f span2"><label>Ranch</label><input value={form.buyerRanch} onChange={(e) => setF("buyerRanch", e.target.value)} placeholder="Ranch" /></div>
               <div className="f span3"><label>Sale amount</label><input value={form.amount} inputMode="decimal" onChange={(e) => setF("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="6000" /></div>
-              <div className="f span3" style={{ justifyContent: "flex-end" }}><label className="chkrow"><input type="checkbox" checked={form.donated} onChange={(e) => setF("donated", e.target.checked)} /> 100% donation to EWA</label></div>
+              <div className="f span3" style={{ justifyContent: "flex-end" }}><label className="chkrow"><input type="checkbox" checked={form.donated} onChange={(e) => setF("donated", e.target.checked)} /> 100% donation to {CFG.orgShort}</label></div>
               <div className="f span6" style={{ justifyContent: "flex-end", alignItems: "flex-end" }}><button className="btn" onClick={addLot}><Plus size={16} /> Add lot</button></div>
             </div>
             <div className="hint"><Users size={13} /> Connect with your organizer passcode to load registered names + ranches and persist lots to the database.</div>
@@ -509,7 +511,7 @@ export default function AuctionSettlement() {
                               <div className="f"><label>Sale type</label><select style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.saleType} onChange={(e) => setEF("saleType", e.target.value)}>{["Live", "Silent"].map((t) => <option key={t}>{t}</option>)}</select></div>
                               <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
                               <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
-                              <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => setEF("donated", e.target.checked)} /> 100% donation to EWA</label></div>
+                              <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => setEF("donated", e.target.checked)} /> 100% donation to {CFG.orgShort}</label></div>
                               <div className="f" style={{flexDirection:"row",gap:8,alignItems:"flex-end"}}>
                                 <button className="btn" style={{fontSize:13,padding:"7px 14px"}} onClick={saveLotEdit}><Check size={14}/> Save</button>
                                 <button className="btn ghost" style={{fontSize:13,padding:"7px 12px"}} onClick={cancelEdit}><X size={14}/> Cancel</button>
@@ -527,7 +529,7 @@ export default function AuctionSettlement() {
             <div className="grand">
               <div><div className="l">Auction lot total</div><div className="n">{money(grand.lotTotal)}</div></div>
               <div><div className="l">Total lot fees</div><div className="n">{money(grand.fees)}</div></div>
-              <div><div className="l">Total EWA commission</div><div className="n">{money(grand.commission)}</div></div>
+              <div><div className="l">Total {CFG.orgShort} commission</div><div className="n">{money(grand.commission)}</div></div>
               <div><div className="l">Total net to consignors</div><div className="n">{money(grand.net)}</div></div>
             </div>
           </>)}
@@ -537,7 +539,7 @@ export default function AuctionSettlement() {
           if (lots.length === 0) return <div className="empty"><div className="big">No consignors yet</div>Add lots on the Payment Detail tab.</div>;
           const sel = consignorSel || consignors[0] || "";
           const ls = lots.filter((l) => l.consignor === sel);
-          const printConsignor = () => { const prev = document.title; document.title = `Consignor Ledger - ${sel} - 2026 AMM`; window.print(); setTimeout(() => { document.title = prev; }, 1000); };
+          const printConsignor = () => { const prev = document.title; document.title = `Consignor Ledger - ${sel} - ${CFG.eventName} 2026`; window.print(); setTimeout(() => { document.title = prev; }, 1000); };
           const donated = ls.filter((l) => l.donated), sold = ls.filter((l) => !l.donated);
           const soldWithBuyer = sold.filter((l) => l.buyerName), unsold = sold.filter((l) => !l.buyerName);
           const donatedTotal = donated.reduce((a, l) => a + l.amount, 0);
@@ -545,14 +547,14 @@ export default function AuctionSettlement() {
           return (<>
             <div className="bar"><select className="sel" value={sel} onChange={(e) => setConsignorSel(e.target.value)}>{consignors.map((c) => <option key={c}>{c}</option>)}</select><button className="btn ghost" onClick={printConsignor}><Printer size={15} /> Print / PDF</button></div>
             <div className="ledger">
-              <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">Consignor Ledger · 2026 AMM</div></div><div style={{ textAlign: "right" }}><div className="whosub">Net due once delivered</div><div className="who serif" style={{ color: "var(--pine)" }}>{money(t.net)}</div></div></div>
-              {donated.length > 0 && (<><div className="secLabel">Lots Donated (100% to EWA)</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th></tr></thead><tbody>{donated.map((l) => { const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td>{l.buyer}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td></tr>; })}<tr className="sub"><td colSpan={4}>Donated total</td><td className="num">{money(donatedTotal)}</td></tr></tbody></table></>)}
+              <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">{`Consignor Ledger · ${CFG.eventName} 2026`}</div></div><div style={{ textAlign: "right" }}><div className="whosub">Net due once delivered</div><div className="who serif" style={{ color: "var(--pine)" }}>{money(t.net)}</div></div></div>
+              {donated.length > 0 && (<><div className="secLabel">Lots Donated (100% to {CFG.orgShort})</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th></tr></thead><tbody>{donated.map((l) => { const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td>{l.buyer}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td></tr>; })}<tr className="sub"><td colSpan={4}>Donated total</td><td className="num">{money(donatedTotal)}</td></tr></tbody></table></>)}
               {soldWithBuyer.length > 0 && (<><div className="secLabel">Lots Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Comm.</th><th className="num">Net</th></tr></thead><tbody>{soldWithBuyer.map((l) => { const c = calc(l, eventFee); const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.buyer}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td></tr>; })}</tbody></table></>)}
               {unsold.length > 0 && (<><div className="secLabel" style={{color:"var(--inkSoft)"}}>Lots Not Yet Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th className="num">List price</th><th className="num">Net</th></tr></thead><tbody>{unsold.map((l) => <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td className="num" style={{color:"var(--inkSoft)"}}>{money(l.amount)}</td><td className="num donated">$0.00</td></tr>)}</tbody></table></>)}
               <div style={{ maxWidth: 360, marginLeft: "auto", marginTop: 18 }}>
                 <div className="totline"><span>Gross lot total</span><span>{money(t.gross)}</span></div>
                 <div className="totline"><span>Lot fees</span><span>{money(t.fees)}</span></div>
-                <div className="totline"><span>EWA commission</span><span>{money(t.commission)}</span></div>
+                <div className="totline"><span>{CFG.orgShort} commission</span><span>{money(t.commission)}</span></div>
                 <div className="totline big"><span>Consignor net</span><span>{money(t.net)}</span></div>
               </div>
             </div>
@@ -649,11 +651,11 @@ export default function AuctionSettlement() {
           const totalPaid = ls.reduce((a, l) => a + (l.amountPaid || 0), 0);
           const totalBalance = Math.max(0, lotTotal - totalPaid);
           const selBidder = findBidder(ls[0]?.buyerName || "");
-          const printBuyer = () => { const prev = document.title; document.title = `Buyer Ledger - ${sel} - 2026 AMM`; window.print(); setTimeout(() => { document.title = prev; }, 1000); };
+          const printBuyer = () => { const prev = document.title; document.title = `Buyer Ledger - ${sel} - ${CFG.eventName} 2026`; window.print(); setTimeout(() => { document.title = prev; }, 1000); };
           return (<>
             <div className="bar"><select className="sel" value={sel} onChange={(e) => setBuyerSel(e.target.value)}>{buyers.map((b) => <option key={b}>{b}</option>)}</select><button className="btn ghost" onClick={printBuyer}><Printer size={15} /> Print / PDF</button></div>
             <div className="ledger">
-              <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">Buyer Ledger · 2026 AMM{selBidder ? ` · Bidder #${selBidder}` : ""}</div></div><div style={{ textAlign: "right" }}><div className="whosub">Balance due</div><div className="who serif" style={{ color: totalBalance > 0 ? "var(--warn)" : "var(--ok)" }}>{money(totalBalance)}</div></div></div>
+              <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">{`Buyer Ledger · ${CFG.eventName} 2026`}{selBidder ? ` · Bidder #${selBidder}` : ""}</div></div><div style={{ textAlign: "right" }}><div className="whosub">Balance due</div><div className="who serif" style={{ color: totalBalance > 0 ? "var(--warn)" : "var(--ok)" }}>{money(totalBalance)}</div></div></div>
               {Object.entries(byCat).map(([cat, items]) => { const sub = items.reduce((a, l) => a + l.amount, 0); const subPaid = items.reduce((a, l) => a + (l.amountPaid || 0), 0); const subBal = Math.max(0, sub - subPaid); return (<div key={cat}><div className="secLabel">{cat}</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th className="num">Amount</th><th className="num">Amt Paid</th><th className="num">Balance Due</th></tr></thead><tbody>{items.map((l) => { const bal = Math.max(0, l.amount - (l.amountPaid || 0)); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.consignor}</td><td className="num">{money(l.amount)}</td><td className="num">{money(l.amountPaid || 0)}</td><td className="num" style={{fontWeight:700,color: bal <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(bal)}</td></tr>; })}<tr className="sub"><td colSpan={3}>{cat} subtotal</td><td className="num">{money(sub)}</td><td className="num">{money(subPaid)}</td><td className="num" style={{color:"var(--warn)",fontWeight:700}}>{money(subBal)}</td></tr></tbody></table></div>); })}
               <div style={{ maxWidth: 420, marginLeft: "auto", marginTop: 18 }}>
                 <div className="totline"><span>Total lot amount</span><span>{money(lotTotal)}</span></div>
@@ -768,7 +770,7 @@ export default function AuctionSettlement() {
               const sponsorRows2 = (Array.isArray(sponsorData)?sponsorData:[]).map((s)=>[s.name||"",s.tier||"",s.amount||0,s.status||"",s.contact_name||"",s.contact_email||"",s.contact_phone||"",s.notes||""]);
               XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([sponsorHdr,...sponsorRows2]), "Sponsors");
 
-              XLSX.writeFile(wb, "EWA-2026-AllData.xlsx");
+              XLSX.writeFile(wb, `${CFG.orgShort}-2026-AllData.xlsx`);
             } catch(e){ alert("Export failed: "+e.message); }
             setXlsxLoading(false);
           };

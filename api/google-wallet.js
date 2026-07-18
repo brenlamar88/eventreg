@@ -53,6 +53,22 @@ export default async function handler(req, res) {
     if (!rows.length) return res.status(404).json({ error: "Ticket not found" });
     const t = rows[0];
 
+    // White-label branding from event_settings (falls back to defaults)
+    let brand = { eventName: "Boil on the Bend", primary: "#183A2F" };
+    try {
+      const br = await fetch(`${SB_URL}/rest/v1/event_settings?event_year=eq.2026&select=event_name,org_name,color_primary&limit=1`, {
+        headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
+      });
+      if (br.ok) {
+        const row = (await br.json())[0] || {};
+        brand = {
+          eventName: row.event_name || brand.eventName,
+          orgName: row.org_name || row.event_name || brand.eventName,
+          primary: /^#[0-9a-fA-F]{6}$/.test(row.color_primary || "") ? row.color_primary : brand.primary,
+        };
+      }
+    } catch { /* defaults stand */ }
+
     const eventId = t.event_id || "boil85";
     const classId = `${issuer}.${eventId}`;
     // Object ids allow only [a-zA-Z0-9._-]; base64url tokens already comply.
@@ -68,10 +84,10 @@ export default async function handler(req, res) {
         eventTicketClasses: [
           {
             id: classId,
-            issuerName: "Boil on the Bend",
-            eventName: { defaultValue: { language: "en-US", value: "Boil on the Bend" } },
+            issuerName: brand.orgName || brand.eventName,
+            eventName: { defaultValue: { language: "en-US", value: brand.eventName } },
             reviewStatus: "UNDER_REVIEW",
-            hexBackgroundColor: "#183A2F",
+            hexBackgroundColor: brand.primary,
           },
         ],
         eventTicketObjects: [

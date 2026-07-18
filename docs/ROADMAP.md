@@ -56,19 +56,21 @@ with per-op idempotency, conflicts surfaced to staff by name. Offline
 walk-ins work — Cvent OnArrival can't do that. Also fixed the index-based
 mutation races and the never-reconciling walk-in ids from the repo review.
 
+### Phase D — White-label Event Setup (this PR)
+The call's CMS idea, done as config-not-code (no per-customer forks):
+`event_settings` carries names, tagline, dates, logo, four brand colors,
+ticket price, and donation presets; the Event Setup screen (`/?app=setup`)
+edits it; every page (registration, stations, ticket pages, sponsorships,
+settlement, wallet passes) reads from it, with the pine/gold system as the
+default. New customer = SQL + env vars + Event Setup screen.
+
 ## Planned next (in order)
 
-### Phase D — White-label admin ("make it stupid simple to replicate")
-The call's CMS idea, done as config-not-code (no per-customer forks, no
-custom builds to maintain):
-- `event_settings` grows into full event config: event name, association
-  name, logo, brand colors, date/venue, ticket price(s), donation presets
-- An admin "Event Setup" screen edits it; every page reads theme + copy from
-  it (the pine/gold system becomes the default theme, not a hardcode)
-- One deployment serves many events/orgs — new customer = new config row,
-  which is what makes "replicate it quickly to wherever" true, and what keeps
-  the "our Ukraine guys customizing every group" nightmare from happening
-- Multi-event support falls out of this (event_id is already on every table)
+### Multi-event / multi-tenant
+Phase D made one event fully config-driven; the next step is many events on
+one deployment: event_id is already on every table — add an event switcher,
+per-event settings rows keyed by event id (not year), and per-event
+organizer passcodes.
 
 ### Phase E — Money engine: consignor/buyer invoicing + payouts
 From the call: "day after the event, Jake Davis has 10 purchases — can he pay
