@@ -4,6 +4,7 @@
 // PATCH  → update sponsor (body: { id, ...fields })
 // DELETE → remove sponsor (?id=<uuid>)
 // Gated by x-organizer-key header.
+import { requestedEvent } from "./event.js";
 const SB   = process.env.SUPABASE_URL;
 const KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -15,7 +16,7 @@ export default async function handler(req, res) {
   if (req.headers["x-organizer-key"] !== PASS) return res.status(401).json({ error: "Unauthorized" });
   try {
     if (req.method === "GET") {
-      const r = await fetch(`${base()}?select=*,sponsor_packages(id,name,price,benefits)&event_year=eq.${YEAR}&order=created_at.asc`, { headers: H });
+      const r = await fetch(`${base()}?select=*,sponsor_packages(id,name,price,benefits)&event_id=eq.${encodeURIComponent(requestedEvent(req))}&order=created_at.asc`, { headers: H });
       return res.status(r.ok ? 200 : 500).json(await r.json());
     }
     if (req.method === "POST") {
@@ -25,6 +26,7 @@ export default async function handler(req, res) {
         headers: { ...H, Prefer: "return=representation" },
         body: JSON.stringify({
           event_year: YEAR,
+          event_id: requestedEvent(req),
           name: b.name,
           contact_name: b.contactName || null,
           contact_email: b.contactEmail || null,

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
 import { DEMO_LOTS, DEMO_PEOPLE, DEMO_REGISTRANTS, DEMO_SPONSORS, DEMO_LOT_FEE } from "./demoData.js";
-import { getEventConfig } from "./eventConfig.js";
+import { getEventConfig, withEvent } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 const CFG = getEventConfig();
@@ -213,7 +213,7 @@ export default function AuctionSettlement() {
     const chargeAmount = lot.amountPaid || 0;
     if (!chargeAmount || !lot.buyerName) return;
     try {
-      const r = await fetch("/api/lot-checkout", {
+      const r = await fetch(withEvent("/api/lot-checkout"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -258,7 +258,7 @@ export default function AuctionSettlement() {
     setLots((p) => p.map((l) => l.id === editId ? { ...l, ...patch } : l));
     if (!IS_DEMO && connected && typeof editId === "string" && !editId.startsWith("tmp-")) {
       try {
-        await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, sale_type: patch.saleType, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
+        await fetch(withEvent("/api/lots"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, sale_type: patch.saleType, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
       } catch {}
     }
     cancelEdit();
@@ -268,18 +268,18 @@ export default function AuctionSettlement() {
   const connect = async () => {
     setDb("loading"); setMsg("");
     try {
-      const lr = await fetch("/api/lots", { headers: hdr() });
+      const lr = await fetch(withEvent("/api/lots"), { headers: hdr() });
       if (!lr.ok) throw new Error(lr.status === 401 ? "Wrong passcode." : `Lots ${lr.status}`);
       const { lots: dbLots, lotFee } = await lr.json();
       setLots(dbLots.map(dbLotToUI)); setEventFee(lotFee);
-      try { const rr = await fetch("/api/registrants", { headers: hdr() }); if (rr.ok) { const rows = await rr.json(); const seen = new Set(); const ppl = []; rows.forEach((x) => { const k = (x.name || "").toLowerCase(); if (x.name && !seen.has(k)) { seen.add(k); ppl.push({ name: x.name, ranch: x.ranch || "", bidderNo: x.bidder_number || "", email: x.email || "" }); } }); setPeople(ppl); } } catch {}
+      try { const rr = await fetch(withEvent("/api/registrants"), { headers: hdr() }); if (rr.ok) { const rows = await rr.json(); const seen = new Set(); const ppl = []; rows.forEach((x) => { const k = (x.name || "").toLowerCase(); if (x.name && !seen.has(k)) { seen.add(k); ppl.push({ name: x.name, ranch: x.ranch || "", bidderNo: x.bidder_number || "", email: x.email || "" }); } }); setPeople(ppl); } } catch {}
       setDb("live"); setMsg(`Connected — ${dbLots.length} lot${dbLots.length === 1 ? "" : "s"} loaded.`);
     } catch (e) {
       setDb("offline"); setMsg(`Live DB unavailable (${e.message}) — working locally. Wired up once deployed.`);
     }
   };
 
-  const saveFee = async () => { if (connected) { try { await fetch("/api/settings", { method: "PUT", headers: hdr(), body: JSON.stringify({ lotFee: Number(eventFee) || 0 }) }); } catch {} } };
+  const saveFee = async () => { if (connected) { try { await fetch(withEvent("/api/settings"), { method: "PUT", headers: hdr(), body: JSON.stringify({ lotFee: Number(eventFee) || 0 }) }); } catch {} } };
 
   const addLot = async () => {
     if (!form.lotNo.trim() || !form.consignorName.trim() || form.amount === "") return;
@@ -304,7 +304,7 @@ export default function AuctionSettlement() {
     if (connected) {
       const c = calc(base, eventFee);
       try {
-        const r = await fetch("/api/lots", { method: "POST", headers: hdr(), body: JSON.stringify({ ...base, commission: c.commission, net: c.net, lotFee: null }) });
+        const r = await fetch(withEvent("/api/lots"), { method: "POST", headers: hdr(), body: JSON.stringify({ ...base, commission: c.commission, net: c.net, lotFee: null }) });
         if (r.ok) { const row = await r.json(); setLots((p) => p.map((l) => l.id === ui.id ? { ...l, id: row.id } : l)); }
       } catch {}
     }
@@ -335,7 +335,7 @@ export default function AuctionSettlement() {
     if (!IS_DEMO && connected) {
       const c = calc(base, eventFee);
       try {
-        const r = await fetch("/api/lots", { method: "POST", headers: hdr(), body: JSON.stringify({ ...base, commission: c.commission, net: c.net, lotFee: null }) });
+        const r = await fetch(withEvent("/api/lots"), { method: "POST", headers: hdr(), body: JSON.stringify({ ...base, commission: c.commission, net: c.net, lotFee: null }) });
         if (r.ok) { const row = await r.json(); setLots((p) => p.map((l) => l.id === ui.id ? { ...l, id: row.id } : l)); }
       } catch {}
     }
@@ -354,12 +354,12 @@ export default function AuctionSettlement() {
       if ("amountPaid" in patch) dbPatch.amount_paid = patch.amountPaid;
       if ("buyerPaid" in patch) dbPatch.buyer_paid = patch.buyerPaid;
       if ("paymentMethod" in patch) dbPatch.payment_method = patch.paymentMethod;
-      try { await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...dbPatch }) }); } catch {}
+      try { await fetch(withEvent("/api/lots"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...dbPatch }) }); } catch {}
     }
   };
   const delLot = async (id) => {
     setLots((p) => p.filter((l) => l.id !== id));
-    if (!IS_DEMO && connected && typeof id === "string" && !id.startsWith("tmp-")) { try { await fetch(`/api/lots?id=${id}`, { method: "DELETE", headers: hdr() }); } catch {} }
+    if (!IS_DEMO && connected && typeof id === "string" && !id.startsWith("tmp-")) { try { await fetch(withEvent(`/api/lots?id=${id}`), { method: "DELETE", headers: hdr() }); } catch {} }
   };
 
   const grand = useMemo(() => lots.reduce((a, l) => { if (!l.donated) { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; } return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }), [lots, eventFee]);
@@ -702,7 +702,7 @@ export default function AuctionSettlement() {
           const exportRegistrations = async () => {
             setRegLoading(true);
             try {
-              const data = IS_DEMO ? DEMO_REGISTRANTS : await (await fetch("/api/registrants", { headers: hdr() })).json();
+              const data = IS_DEMO ? DEMO_REGISTRANTS : await (await fetch(withEvent("/api/registrants"), { headers: hdr() })).json();
               const rows = (Array.isArray(data)?data:[]).map((x)=>[
                 x.bidder_number||"", x.name||"", x.email||"", x.phone||"",
                 x.ranch||x.notes||"", x.party||1, x.status||"", x.source||"",
@@ -720,7 +720,7 @@ export default function AuctionSettlement() {
               if (IS_DEMO) {
                 regData = DEMO_REGISTRANTS; sponsorData = DEMO_SPONSORS;
               } else {
-                const [regRes, sponsorRes] = await Promise.all([fetch("/api/registrants", { headers: hdr() }), fetch("/api/sponsors", { headers: hdr() })]);
+                const [regRes, sponsorRes] = await Promise.all([fetch(withEvent("/api/registrants"), { headers: hdr() }), fetch(withEvent("/api/sponsors"), { headers: hdr() })]);
                 regData = regRes.ok ? await regRes.json() : [];
                 sponsorData = sponsorRes.ok ? await sponsorRes.json() : [];
               }

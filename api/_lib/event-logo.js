@@ -3,6 +3,7 @@
 //   upload the event logo to the public `event-assets` bucket, then stamp
 //   event_settings.logo_url. Returns { ok:true, logoUrl }.
 // Gated by x-organizer-key header. Same pattern as api/sponsor-logo.js.
+import { requestedEvent } from "./event.js";
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -21,7 +22,8 @@ export default async function handler(req, res) {
     if (String(dataBase64).length > MAX_B64) return res.status(413).json({ error: "Logo too large (max ~2 MB)" });
     if (!ALLOWED.includes(contentType)) return res.status(415).json({ error: "Unsupported type — use PNG, JPEG, WebP, or SVG" });
 
-    const path = `logo-${YEAR}-${String(filename).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const eventId = requestedEvent(req);
+    const path = `logo-${eventId}-${String(filename).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const up = await fetch(`${SB}/storage/v1/object/event-assets/${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${KEY}`, apikey: KEY, "Content-Type": contentType, "x-upsert": "true" },
@@ -33,10 +35,10 @@ export default async function handler(req, res) {
     }
 
     const logoUrl = `${SB}/storage/v1/object/public/event-assets/${path}`;
-    const pr = await fetch(`${SB}/rest/v1/event_settings?on_conflict=event_year`, {
+    const pr = await fetch(`${SB}/rest/v1/event_settings?on_conflict=event_id`, {
       method: "POST",
       headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify({ event_year: YEAR, logo_url: logoUrl, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ event_id: eventId, logo_url: logoUrl, updated_at: new Date().toISOString() }),
     });
     if (!pr.ok) {
       console.error("event-logo patch error:", pr.status, await pr.text().catch(() => ""));

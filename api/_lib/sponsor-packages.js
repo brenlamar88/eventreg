@@ -4,6 +4,7 @@
 // PATCH  → update package (body: { id, ...fields })
 // DELETE → remove package (?id=<uuid>)
 // Gated by x-organizer-key header.
+import { requestedEvent } from "./event.js";
 const SB   = process.env.SUPABASE_URL;
 const KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -21,7 +22,7 @@ export default async function handler(req, res) {
   if (req.headers["x-organizer-key"] !== PASS) return res.status(401).json({ error: "Unauthorized" });
   try {
     if (req.method === "GET") {
-      const r = await fetch(`${base()}?event_year=eq.${YEAR}&order=sort_order.asc,created_at.asc`, { headers: H });
+      const r = await fetch(`${base()}?event_id=eq.${encodeURIComponent(requestedEvent(req))}&order=sort_order.asc,created_at.asc`, { headers: H });
       if (!r.ok) return fail(res, r, "GET");
       return res.status(200).json(await r.json());
     }
@@ -32,6 +33,7 @@ export default async function handler(req, res) {
         headers: { ...H, Prefer: "return=representation" },
         body: JSON.stringify({
           event_year: YEAR,
+          event_id: requestedEvent(req),
           name: b.name,
           price: Number(b.price) || 0,
           description: b.description || null,

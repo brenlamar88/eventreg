@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Check, CheckCircle2, AlertTriangle, Calendar, MapPin } from "lucide-react";
 import TicketQR from "./TicketQR.jsx";
-import { getEventConfig } from "./eventConfig.js";
+import { getEventConfig, withEvent } from "./eventConfig.js";
 
 /* ============================================================================
    Public ticket page — /?ticket=<token>
@@ -62,7 +62,7 @@ export default function TicketPage() {
 
   useEffect(() => {
     if (!token) { setState("notfound"); return; }
-    fetch(`/api/ticket?token=${encodeURIComponent(token)}`)
+    fetch(withEvent(`/api/ticket?token=${encodeURIComponent(token)}`))
       .then(async (r) => {
         if (r.status === 404) { setState("notfound"); return; }
         if (!r.ok) throw new Error(`Server returned ${r.status}`);
@@ -70,8 +70,8 @@ export default function TicketPage() {
         setState("ok");
       })
       .catch(() => setState("error"));
-    fetch("/api/wallet-pass?probe=1").then((r) => setWallet((w) => ({ ...w, apple: r.ok }))).catch(() => {});
-    fetch("/api/google-wallet?probe=1").then((r) => setWallet((w) => ({ ...w, google: r.ok }))).catch(() => {});
+    fetch(withEvent("/api/wallet-pass?probe=1")).then((r) => setWallet((w) => ({ ...w, apple: r.ok }))).catch(() => {});
+    fetch(withEvent("/api/google-wallet?probe=1")).then((r) => setWallet((w) => ({ ...w, google: r.ok }))).catch(() => {});
   }, [token]);
 
   return (
@@ -112,8 +112,8 @@ export default function TicketPage() {
             </div>
             <p className="tkt-note">Show this QR code at the door — staff scan it to check you in.</p>
             <div className="tkt-btns">
-              {wallet.apple && <a className="btn btn-p" href={`/api/wallet-pass?token=${encodeURIComponent(ticket.ticket_token)}`}>Add to Apple Wallet</a>}
-              {wallet.google && <a className="btn btn-p" href={`/api/google-wallet?token=${encodeURIComponent(ticket.ticket_token)}`}>Add to Google Wallet</a>}
+              {wallet.apple && <a className="btn btn-p" href={withEvent(`/api/wallet-pass?token=${encodeURIComponent(ticket.ticket_token)}`)}>Add to Apple Wallet</a>}
+              {wallet.google && <a className="btn btn-p" href={withEvent(`/api/google-wallet?token=${encodeURIComponent(ticket.ticket_token)}`)}>Add to Google Wallet</a>}
             </div>
           </>
         )}

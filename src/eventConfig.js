@@ -34,11 +34,33 @@ export const DEFAULTS = {
   },
 };
 
-const LS_KEY = "eventreg-config-v1";
+// Multi-event: /?event=<slug> selects the event on every page; no param =
+// the server's default event. The resolved slug rides along on API calls
+// (withEvent) and page links (eventLink).
+export const EVENT_PARAM = (() => {
+  try { return (new URLSearchParams(window.location.search).get("event") || "").trim().toLowerCase(); }
+  catch { return ""; }
+})();
+
+const LS_KEY = "eventreg-config-v1" + (EVENT_PARAM ? ":" + EVENT_PARAM : "");
 let current = DEFAULTS;
 
 export function getEventConfig() {
   return current;
+}
+
+// Append the resolved event to an API url (safe everywhere — routes that
+// don't scope by event just ignore the param).
+export function withEvent(url) {
+  const id = current.eventId || EVENT_PARAM || DEFAULTS.eventId;
+  return url + (url.includes("?") ? "&" : "?") + "event=" + encodeURIComponent(id);
+}
+
+// Propagate the event through page links — only when one was explicitly in
+// the URL, so default-event links stay clean.
+export function eventLink(href) {
+  if (!EVENT_PARAM) return href;
+  return href + (href.includes("?") ? "&" : "?") + "event=" + encodeURIComponent(EVENT_PARAM);
 }
 
 const pick = (v, d) => (v === null || v === undefined || v === "" ? d : v);
@@ -47,6 +69,7 @@ function fromRow(row) {
   if (!row) return DEFAULTS;
   return {
     ...DEFAULTS,
+    eventId: pick(row.event_id, EVENT_PARAM || DEFAULTS.eventId),
     eventName: pick(row.event_name, DEFAULTS.eventName),
     orgName: pick(row.org_name, DEFAULTS.orgName),
     orgShort: pick(row.org_short, DEFAULTS.orgShort),
@@ -111,7 +134,7 @@ export async function loadEventConfig() {
   //    paint is branded — but never block boot on a dead network.
   const refresh = (async () => {
     try {
-      const r = await fetch("/api/event-config");
+      const r = await fetch("/api/event-config" + (EVENT_PARAM ? `?event=${encodeURIComponent(EVENT_PARAM)}` : ""));
       if (!r.ok) return;
       current = fromRow(await r.json());
       try { localStorage.setItem(LS_KEY, JSON.stringify(current)); } catch {}

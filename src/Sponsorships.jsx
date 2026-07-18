@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
 import { DEMO_SPONSORS } from "./demoData.js";
-import { getEventConfig } from "./eventConfig.js";
+import { getEventConfig, withEvent } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 const CFG = getEventConfig();
@@ -215,12 +215,12 @@ export default function Sponsorships() {
   const connect = async () => {
     setDb("loading"); setMsg("");
     try {
-      const r = await fetch("/api/sponsors", { headers: hdr() });
+      const r = await fetch(withEvent("/api/sponsors"), { headers: hdr() });
       if (!r.ok) throw new Error(r.status === 401 ? "Wrong passcode." : `Error ${r.status}`);
       const data = await r.json();
       setSponsors(Array.isArray(data) ? data.map(dbToUI) : []);
       try {
-        const pr = await fetch("/api/sponsor-packages", { headers: hdr() });
+        const pr = await fetch(withEvent("/api/sponsor-packages"), { headers: hdr() });
         if (pr.ok) { const pd = await pr.json(); setPackages(Array.isArray(pd) ? pd.map(pkgDbToUI) : []); }
       } catch {}
       setDb("live");
@@ -258,7 +258,7 @@ export default function Sponsorships() {
     setForm(blankForm);
     if (!IS_DEMO && connected) {
       try {
-        const r = await fetch("/api/sponsors", { method: "POST", headers: hdr(), body: JSON.stringify({ ...ui, packageId: String(ui.packageId || "").startsWith("tmp-") ? null : ui.packageId }) });
+        const r = await fetch(withEvent("/api/sponsors"), { method: "POST", headers: hdr(), body: JSON.stringify({ ...ui, packageId: String(ui.packageId || "").startsWith("tmp-") ? null : ui.packageId }) });
         if (r.ok) { const row = await r.json(); setSponsors((p) => p.map((s) => s.id === ui.id ? { ...s, id: row.id } : s)); }
       } catch {}
     }
@@ -269,21 +269,21 @@ export default function Sponsorships() {
     setSponsors((p) => p.map((s) => s.id === id ? { ...s, ...patch } : s));
     setExpandId(null);
     if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
-      try { await fetch("/api/sponsors", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...patch }) }); } catch {}
+      try { await fetch(withEvent("/api/sponsors"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...patch }) }); } catch {}
     }
   };
 
   const patchField = async (id, key, value) => {
     setSponsors((p) => p.map((s) => s.id === id ? { ...s, [key]: value } : s));
     if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
-      try { await fetch("/api/sponsors", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, [key]: value }) }); } catch {}
+      try { await fetch(withEvent("/api/sponsors"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, [key]: value }) }); } catch {}
     }
   };
 
   const delSponsor = async (id) => {
     setSponsors((p) => p.filter((s) => s.id !== id));
     if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
-      try { await fetch(`/api/sponsors?id=${id}`, { method: "DELETE", headers: hdr() }); } catch {}
+      try { await fetch(withEvent(`/api/sponsors?id=${id}`), { method: "DELETE", headers: hdr() }); } catch {}
     }
   };
 
@@ -293,7 +293,7 @@ export default function Sponsorships() {
     setPackages((p) => [...p, ui]);
     if (!IS_DEMO && connected) {
       try {
-        const r = await fetch("/api/sponsor-packages", { method: "POST", headers: hdr(), body: JSON.stringify(data) });
+        const r = await fetch(withEvent("/api/sponsor-packages"), { method: "POST", headers: hdr(), body: JSON.stringify(data) });
         if (r.ok) { const row = await r.json(); setPackages((p) => p.map((x) => x.id === ui.id ? pkgDbToUI(row) : x)); }
       } catch {}
     }
@@ -315,7 +315,7 @@ export default function Sponsorships() {
     setSponsors((p) => p.map((s) => s.packageId === id ? { ...s, packageName: patch.name, packageBenefits: benefits } : s));
     setEditPkgId(null);
     if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
-      try { await fetch("/api/sponsor-packages", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...patch }) }); } catch {}
+      try { await fetch(withEvent("/api/sponsor-packages"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...patch }) }); } catch {}
     }
   };
 
@@ -323,7 +323,7 @@ export default function Sponsorships() {
     setPackages((p) => p.filter((x) => x.id !== id));
     setSponsors((p) => p.map((s) => s.packageId === id ? { ...s, packageId: null, packageName: null, packageBenefits: [] } : s));
     if (!IS_DEMO && connected && !String(id).startsWith("tmp-")) {
-      try { await fetch(`/api/sponsor-packages?id=${id}`, { method: "DELETE", headers: hdr() }); } catch {}
+      try { await fetch(withEvent(`/api/sponsor-packages?id=${id}`), { method: "DELETE", headers: hdr() }); } catch {}
     }
   };
 
@@ -365,7 +365,7 @@ export default function Sponsorships() {
     reader.onload = async () => {
       const dataBase64 = String(reader.result).split(",")[1] || "";
       try {
-        const r = await fetch("/api/sponsor-logo", { method: "POST", headers: hdr(), body: JSON.stringify({ sponsorId: s.id, filename: file.name, contentType: file.type, dataBase64 }) });
+        const r = await fetch(withEvent("/api/sponsor-logo"), { method: "POST", headers: hdr(), body: JSON.stringify({ sponsorId: s.id, filename: file.name, contentType: file.type, dataBase64 }) });
         if (r.ok) {
           const j = await r.json();
           setSponsors((p) => p.map((x) => x.id === s.id ? { ...x, logoUrl: j.logoUrl, logoReceived: true } : x));

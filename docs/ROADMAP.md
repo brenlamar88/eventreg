@@ -66,11 +66,13 @@ default. New customer = SQL + env vars + Event Setup screen.
 
 ## Planned next (in order)
 
-### Multi-event / multi-tenant
-Phase D made one event fully config-driven; the next step is many events on
-one deployment: event_id is already on every table — add an event switcher,
-per-event settings rows keyed by event id (not year), and per-event
-organizer passcodes.
+### Multi-event (Phase E — DONE)
+Many events on one deployment: event_settings keyed by slug, `?event=<slug>`
+on every page, event switcher + create + default on the Event Setup screen,
+all data (registrants/sponsors/packages/lots) scoped by event_id, wallet
+passes branded per event. Default event needs no param, so nothing changed
+for the current site. Still open as a follow-on: per-event organizer
+passcodes (today one passcode spans all events on the deployment).
 
 ### Phase E — Money engine: consignor/buyer invoicing + payouts
 From the call: "day after the event, Jake Davis has 10 purchases — can he pay

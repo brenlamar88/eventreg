@@ -56,7 +56,7 @@ export default async function handler(req, res) {
     // White-label branding from event_settings (falls back to defaults)
     let brand = { eventName: "Boil on the Bend", primary: "#183A2F" };
     try {
-      const br = await fetch(`${SB_URL}/rest/v1/event_settings?event_year=eq.2026&select=event_name,org_name,color_primary&limit=1`, {
+      const br = await fetch(`${SB_URL}/rest/v1/event_settings?event_id=eq.${encodeURIComponent(t.event_id || "boil85")}&select=event_name,org_name,color_primary&limit=1`, {
         headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
       });
       if (br.ok) {

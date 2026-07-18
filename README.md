@@ -158,6 +158,28 @@ the env vars, fill in Event Setup — no code changes, no fork.
 
 Run `db/phase-d.sql` once in the Supabase SQL editor (after `db/phase-c.sql`).
 
+### Multi-event (Phase E)
+
+One deployment now serves **many events**, each with its own branding,
+pricing, roster, sponsors, packages, auction, and settings. An event is an
+`event_settings` row keyed by a URL slug:
+
+- **URLs select the event**: `/?event=<slug>` works on every page —
+  registration, stations (`/?event=<slug>&station=scan`), ticket pages,
+  and the organizer apps. **No parameter = the default event**, so existing
+  links keep working unchanged.
+- **Create and switch events** on the Event Setup screen (`/?app=setup`):
+  an Events card lists all events, creates new ones (slug + name + year),
+  switches between them, sets the default, and shows the shareable links.
+- Registrants, sponsors, packages, and lots are all scoped by `event_id`;
+  the API resolves the event per request from `?event=`. Ticket tokens stay
+  globally unique, so a single scan station could even check in tickets
+  across events.
+- Wallet passes brand themselves from the registrant's own event.
+- Run `db/phase-e.sql` once (after `db/phase-d.sql`) — it backfills all
+  existing data to the `boil85` event and marks it the default, so the
+  current site is unchanged.
+
 ### Wallet passes (optional, env-gated)
 
 The **Add to Apple Wallet / Google Wallet** buttons appear automatically once
