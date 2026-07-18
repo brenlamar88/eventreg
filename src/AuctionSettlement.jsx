@@ -44,6 +44,7 @@ function downloadCsv(filename, rows) {
 const dbLotToUI = (r) => ({
   id: r.id, lotNo: r.lot_no, description: r.description || "",
   category: r.auction_category || (r.donated ? "Donated" : ""),
+  saleType: r.sale_type || "Live",
   consignorName: r.consignor_name || "", consignorRanch: r.consignor_ranch || "",
   buyerName: r.buyer_name || "", buyerRanch: r.buyer_ranch || "",
   consignor: display(r.consignor_name || "(unnamed)", r.consignor_ranch || ""),
@@ -166,15 +167,16 @@ export default function AuctionSettlement() {
   const [msg, setMsg] = useState("");
   const [regLoading, setRegLoading] = useState(false);
   const [xlsxLoading, setXlsxLoading] = useState(false);
-  const blankForm = { lotNo: "", description: "", category: "Elite Registry", consignorName: "", consignorRanch: "", buyerName: "", buyerRanch: "", amount: "", donated: false };
+  const blankForm = { lotNo: "", description: "", category: "Elite Registry", saleType: "Live", consignorName: "", consignorRanch: "", buyerName: "", buyerRanch: "", amount: "", donated: false };
   const [form, setForm] = useState(blankForm);
   const [consignorSel, setConsignorSel] = useState("");
   const [buyerSel, setBuyerSel] = useState("");
   const [editId, setEditId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [grandFormErr, setGrandFormErr] = useState("");
+  const [saleFilter, setSaleFilter] = useState("All");
   const setEF = (k, v) => setEditForm((p) => ({ ...p, [k]: v }));
-  const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated }); };
+  const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, saleType: l.saleType || "Live", consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated }); };
   const cancelEdit = () => { setEditId(null); setEditForm({}); };
 
   const connected = db === "live";
@@ -246,6 +248,7 @@ export default function AuctionSettlement() {
     const patch = {
       lotNo: editForm.lotNo.trim(), description: editForm.description.trim(),
       category: editForm.donated ? "Donated" : editForm.category,
+      saleType: editForm.saleType || "Live",
       consignorName: editForm.consignorName.trim(), consignorRanch: editForm.consignorRanch.trim(),
       donated: editForm.donated,
       consignor: display(editForm.consignorName.trim(), editForm.consignorRanch.trim()),
@@ -253,7 +256,7 @@ export default function AuctionSettlement() {
     setLots((p) => p.map((l) => l.id === editId ? { ...l, ...patch } : l));
     if (!IS_DEMO && connected && typeof editId === "string" && !editId.startsWith("tmp-")) {
       try {
-        await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
+        await fetch("/api/lots", { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, sale_type: patch.saleType, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
       } catch {}
     }
     cancelEdit();
@@ -280,6 +283,7 @@ export default function AuctionSettlement() {
     if (!form.lotNo.trim() || !form.consignorName.trim() || form.amount === "") return;
     const base = {
       lotNo: form.lotNo.trim(), description: form.description.trim(), category: form.donated ? "Donated" : form.category,
+      saleType: form.saleType || "Live",
       consignorName: form.consignorName.trim(), consignorRanch: form.consignorRanch.trim(),
       buyerName: form.buyerName.trim(), buyerRanch: form.buyerRanch.trim(),
       amount: Number(form.amount) || 0, donated: form.donated,
@@ -310,7 +314,7 @@ export default function AuctionSettlement() {
     if (!form.consignorName.trim()) { setGrandFormErr("Consignor name is required."); return; }
     if (form.amount === "" || form.amount === "0") { setGrandFormErr("Sale amount is required."); return; }
     const base = {
-      lotNo: form.lotNo.trim(), description: form.description.trim(), category: "Grand Auction",
+      lotNo: form.lotNo.trim(), description: form.description.trim(), category: "Grand Auction", saleType: "Live",
       consignorName: form.consignorName.trim(), consignorRanch: form.consignorRanch.trim(),
       buyerName: form.buyerName.trim(), buyerRanch: form.buyerRanch.trim(),
       amount: Number(form.amount) || 0, donated: false,
@@ -362,6 +366,15 @@ export default function AuctionSettlement() {
     const map = {}; lots.forEach((l) => { if (!l.donated) (map[l.consignor] ||= []).push(l); });
     return Object.entries(map).map(([name, ls]) => { ls.sort(sortLot); const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }); return { name, ls, t, minLot: ls[0]?.lotNo ?? "" }; }).sort((a, b) => Number(a.minLot) - Number(b.minLot) || a.minLot.localeCompare(b.minLot));
   }, [lots, eventFee]);
+  const saleCounts = useMemo(() => ({ All: lots.length, Live: lots.filter((l) => (l.saleType || "Live") === "Live").length, Silent: lots.filter((l) => l.saleType === "Silent").length }), [lots]);
+  const shownByConsignor = useMemo(() => {
+    if (saleFilter === "All") return byConsignor;
+    return byConsignor.map((g) => {
+      const ls = g.ls.filter((l) => (l.saleType || "Live") === saleFilter);
+      const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 });
+      return { ...g, ls, t };
+    }).filter((g) => g.ls.length > 0);
+  }, [byConsignor, saleFilter, eventFee]);
   const consignors = useMemo(() => [...new Set(lots.map((l) => l.consignor))].sort(), [lots]);
   const buyers = useMemo(() => [...new Set(lots.map((l) => l.buyer).filter((b) => b !== "—"))].sort(), [lots]);
   const deliveredCount = lots.filter((l) => !l.donated && l.delivered).length;
@@ -438,8 +451,9 @@ export default function AuctionSettlement() {
             <div className="addhdr"><Plus size={17} /> Add a lot</div>
             <div className="fgrid">
               <div className="f span2"><label>Lot #</label><input value={form.lotNo} onChange={(e) => setF("lotNo", e.target.value)} placeholder="501" /></div>
-              <div className="f span6"><label>Description</label><input value={form.description} onChange={(e) => setF("description", e.target.value)} placeholder="0.1 Fallow — Green 211" /></div>
-              <div className="f span4"><label>Auction category</label><select value={form.category} onChange={(e) => setF("category", e.target.value)} disabled={form.donated}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
+              <div className="f span4"><label>Description</label><input value={form.description} onChange={(e) => setF("description", e.target.value)} placeholder="0.1 Fallow — Green 211" /></div>
+              <div className="f span3"><label>Auction category</label><select value={form.category} onChange={(e) => setF("category", e.target.value)} disabled={form.donated}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
+              <div className="f span3"><label>Sale type</label><select value={form.saleType} onChange={(e) => setF("saleType", e.target.value)}>{["Live", "Silent"].map((t) => <option key={t}>{t}</option>)}</select></div>
               <div className="f span4"><label>Consignor name</label><input list="people-list" value={form.consignorName} onChange={(e) => onNameChange("consignor", e.target.value)} placeholder="Start typing…" /></div>
               <div className="f span2"><label>Ranch</label><input value={form.consignorRanch} onChange={(e) => setF("consignorRanch", e.target.value)} placeholder="Ranch" /></div>
               <div className="f span4"><label>Buyer name</label><input list="people-list" value={form.buyerName} onChange={(e) => onNameChange("buyer", e.target.value)} placeholder="Start typing…" /></div>
@@ -454,16 +468,21 @@ export default function AuctionSettlement() {
           {lots.length === 0 ? (
             <div className="empty"><div className="big">No lots yet</div>Set your event lot fee, Connect to load registered people, then add lots as the auction settles.</div>
           ) : (<>
+            <div className="bar">
+              {["All", "Live", "Silent"].map((t) => (
+                <button key={t} className="btn ghost" style={{fontSize:12.5,padding:"6px 14px",borderRadius:999,...(saleFilter === t ? {background:"var(--pine)",color:"#fff",borderColor:"var(--pine)"} : {})}} onClick={() => setSaleFilter(t)}>{t} ({saleCounts[t]})</button>
+              ))}
+            </div>
             <table className="tbl">
               <thead><tr><th>Lot</th><th>Description</th><th>Buyer</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th>Delivery</th><th>Check #</th><th>Date</th><th></th></tr></thead>
               <tbody>
-                {byConsignor.map((g) => (
+                {shownByConsignor.map((g) => (
                   <React.Fragment key={g.name}>
                     <tr className="grp2"><td colSpan={14}>{g.name}</td></tr>
                     {g.ls.map((l) => { const c = calc(l, eventFee); const status = l.checkNo ? "paid" : l.delivered ? "ready" : "wait"; const bidderNo = findBidder(l.buyerName); const balanceDue = l.amount - (l.amountPaid || 0); return (
                       <React.Fragment key={l.id}>
                       <tr>
-                        <td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td>
+                        <td className="lot">{l.lotNo}</td><td>{l.description || "—"}{l.saleType === "Silent" && <span className="badge" style={{background:"#e7eef0",color:"#2a5560",marginLeft:6}}>Silent</span>}</td>
                         <td>
                           <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => onBuyerChange(l.id, e.target.value, l.buyerRanch)} />
                           {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
@@ -487,6 +506,7 @@ export default function AuctionSettlement() {
                               <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
                               <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
                               <div className="f"><label>Category</label><select style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.category} disabled={editForm.donated} onChange={(e) => setEF("category", e.target.value)}>{CATEGORIES.map((cat) => <option key={cat}>{cat}</option>)}</select></div>
+                              <div className="f"><label>Sale type</label><select style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.saleType} onChange={(e) => setEF("saleType", e.target.value)}>{["Live", "Silent"].map((t) => <option key={t}>{t}</option>)}</select></div>
                               <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
                               <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
                               <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => setEF("donated", e.target.checked)} /> 100% donation to EWA</label></div>
@@ -648,10 +668,10 @@ export default function AuctionSettlement() {
           const fmt2 = (n) => Number(n).toFixed(2);
 
           const exportAllLots = () => {
-            const hdr = ["Lot #","Description","Category","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
+            const hdr = ["Lot #","Description","Category","Sale Type","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
             const rows = [...lots].sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
               const c=calc(l,eventFee);
-              return [l.lotNo,l.description,l.category,l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),fmt2(l.amount),fmt2(c.fee),fmt2(c.commission),fmt2(c.net),fmt2(l.amountPaid||0),fmt2(Math.max(0,l.amount-(l.amountPaid||0))),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+              return [l.lotNo,l.description,l.category,l.saleType||"Live",l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),fmt2(l.amount),fmt2(c.fee),fmt2(c.commission),fmt2(c.net),fmt2(l.amountPaid||0),fmt2(Math.max(0,l.amount-(l.amountPaid||0))),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
             });
             downloadCsv("lots-all.csv",[hdr,...rows]);
           };
@@ -715,10 +735,10 @@ export default function AuctionSettlement() {
               XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([regHdr,...regRows]), "Registrants");
 
               // Sheet 2: All Lots
-              const lotHdr = ["Lot #","Description","Category","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
+              const lotHdr = ["Lot #","Description","Category","Sale Type","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
               const lotRows = [...lots].sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
                 const c=calc(l,eventFee);
-                return [l.lotNo,l.description,l.category,l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,c.fee,c.commission,c.net,l.amountPaid||0,Math.max(0,l.amount-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+                return [l.lotNo,l.description,l.category,l.saleType||"Live",l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,c.fee,c.commission,c.net,l.amountPaid||0,Math.max(0,l.amount-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
               });
               XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([lotHdr,...lotRows]), "All Lots");
 

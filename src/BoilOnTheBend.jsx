@@ -9,7 +9,11 @@ import OrganizerNav from "./OrganizerNav.jsx";
 import TicketQR from "./TicketQR.jsx";
 import { DEMO_REGISTRANTS, DEMO_SPONSORS } from "./demoData.js";
 
-const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const IS_DEMO = URL_PARAMS.get("demo") === "true";
+// Locked iPad station modes: "/?station=scan" (ticket scanning) and
+// "/?station=register" (self-serve walk-in registration).
+const STATION = URL_PARAMS.get("station");
 
 /* ============================================================================
    1. EVENT CONFIG
@@ -312,18 +316,17 @@ function mintTicketToken() {
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/* Camera scanner for the Door view. Decodes ticket QR codes with the device
-   camera (@zxing/browser over getUserMedia — works in Safari on iPad) and
-   redeems each token against /api/scan, which checks in atomically and
-   classifies accepted / duplicate / invalid. Manual entry is the fallback for
-   damaged codes or devices without a camera. */
-function ScanModal({ passcode, onClose, onCheckedIn }) {
+/* Camera scanner shared by the Door modal and the standalone Scan Station.
+   Decodes ticket QR codes with the device camera (@zxing/browser over
+   getUserMedia — works in Safari on iPad) and redeems each token against
+   /api/scan, which checks in atomically and classifies accepted / duplicate /
+   invalid. Manual entry is the fallback for damaged codes or no camera. */
+function useTicketScanner(passcode, device, onAccepted) {
   const videoRef = React.useRef(null);
   const busyRef = React.useRef(false);
   const lastRef = React.useRef({ token: "", at: 0 });
   const [status, setStatus] = useState(null);
   const [cameraError, setCameraError] = useState("");
-  const [manual, setManual] = useState("");
 
   const redeem = async (token) => {
     token = (token || "").trim();
@@ -339,12 +342,12 @@ function ScanModal({ passcode, onClose, onCheckedIn }) {
       const r = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-organizer-key": passcode },
-        body: JSON.stringify({ token, device: "door" }),
+        body: JSON.stringify({ token, device }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `Scan failed (${r.status})`);
       setStatus(data);
-      if (data.result === "accepted") onCheckedIn?.(data.registrant);
+      if (data.result === "accepted") onAccepted?.(data.registrant);
     } catch (err) {
       setStatus({ result: "error", message: err.message });
     } finally {
@@ -370,10 +373,34 @@ function ScanModal({ passcode, onClose, onCheckedIn }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const tone = status?.result === "accepted" ? { bg: "#e4f0e9", fg: "var(--ok)", bd: "#b8dcc6" }
-    : status?.result === "duplicate" ? { bg: "#f6ece0", fg: "var(--warn)", bd: "#e6cfa8" }
-    : { bg: "#fdf0ec", fg: "#b4471f", bd: "#efc4b3" };
+  return { videoRef, status, cameraError, redeem };
+}
 
+function ScanBanner({ status, big }) {
+  if (!status) return null;
+  const tone = status.result === "accepted" ? { bg: "#e4f0e9", fg: "var(--ok)", bd: "#b8dcc6" }
+    : status.result === "duplicate" ? { bg: "#f6ece0", fg: "var(--warn)", bd: "#e6cfa8" }
+    : { bg: "#fdf0ec", fg: "#b4471f", bd: "#efc4b3" };
+  const unpaid = status.registrant && status.registrant.status && status.registrant.status !== "Paid";
+  const Icon = status.result === "accepted" ? CheckCircle2 : AlertTriangle;
+  const sz = big ? 22 : 16;
+  return (
+    <div style={{ marginTop: 12, background: tone.bg, color: tone.fg, border: `1.5px solid ${tone.bd}`, borderRadius: 12, padding: big ? "18px 20px" : "12px 14px", fontWeight: 600, fontSize: big ? 19 : 14 }}>
+      <Icon size={sz} style={{ display: "inline", verticalAlign: "middle", marginRight: 8 }} />
+      {status.result === "accepted" && <>{status.registrant?.name || "Guest"} — party of {status.registrant?.party || 1} checked in!</>}
+      {status.result === "duplicate" && <>Already checked in: {status.registrant?.name || "Guest"}{status.registrant?.checked_in_at ? ` at ${new Date(status.registrant.checked_in_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</>}
+      {status.result === "invalid" && <>Ticket not recognized.</>}
+      {status.result === "error" && <>{status.message}</>}
+      {unpaid && (status.result === "accepted" || status.result === "duplicate") && (
+        <div style={{ marginTop: 6, fontSize: big ? 15 : 12.5, color: "var(--warn)" }}>Payment due — status is {status.registrant.status}. Send them to the cashier.</div>
+      )}
+    </div>
+  );
+}
+
+function ScanModal({ passcode, onClose, onCheckedIn }) {
+  const { videoRef, status, cameraError, redeem } = useTicketScanner(passcode, "door", onCheckedIn);
+  const [manual, setManual] = useState("");
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(12,42,32,.66)", zIndex: 60, display: "grid", placeItems: "center", padding: 18 }} onClick={onClose}>
       <div style={{ background: "var(--paper)", borderRadius: 18, border: "1.5px solid var(--line)", width: "min(440px,100%)", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
@@ -389,16 +416,7 @@ function ScanModal({ passcode, onClose, onCheckedIn }) {
           ) : (
             <video ref={videoRef} style={{ width: "100%", borderRadius: 12, background: "#0C2A20", aspectRatio: "4/3", objectFit: "cover" }} muted playsInline />
           )}
-
-          {status && (
-            <div style={{ marginTop: 12, background: tone.bg, color: tone.fg, border: `1.5px solid ${tone.bd}`, borderRadius: 12, padding: "12px 14px", fontWeight: 600, fontSize: 14 }}>
-              {status.result === "accepted" && <><CheckCircle2 size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{status.registrant?.name || "Guest"} — party of {status.registrant?.party || 1} checked in!</>}
-              {status.result === "duplicate" && <><AlertTriangle size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />Already checked in: {status.registrant?.name || "Guest"}{status.registrant?.checked_in_at ? ` at ${new Date(status.registrant.checked_in_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</>}
-              {status.result === "invalid" && <><AlertTriangle size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />Ticket not recognized.</>}
-              {status.result === "error" && <><AlertTriangle size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{status.message}</>}
-            </div>
-          )}
-
+          <ScanBanner status={status} />
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <input
               className="inp" style={{ flex: 1 }} placeholder="Or type the ticket code…"
@@ -410,6 +428,250 @@ function ScanModal({ passcode, onClose, onCheckedIn }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ============================================================================
+   STATION MODES — locked, single-purpose screens for door iPads.
+   Launch them from the Door view; pin the iPad to the tab with iOS Guided
+   Access so guests can't wander.
+
+   Validation model (why guests can't check in as someone else):
+   - Self-serve check-in requires POSSESSION of the ticket — the QR code or
+     its code, an unguessable 128-bit token. There is no name search on any
+     self-serve screen, so "type three letters of somebody's name" is not
+     possible outside the staff-only Door view (organizer passcode).
+   - Every accept flashes the name + party size, so a staffer standing at the
+     scan station can eyeball that a party of 2 isn't walking six people in.
+   ========================================================================== */
+
+function StationShell({ icon, title, subtitle, children, onExit, exitLabel }) {
+  return (
+    <div className="mrd" style={{ minHeight: "100vh", background: "var(--pine2)", display: "flex", flexDirection: "column" }}>
+      <Styles />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: "1px solid var(--pineLine)" }}>
+        <span className="brandtag">{EVENT.org}</span>
+        {onExit && <button onClick={onExit} style={{ background: "none", border: "1px solid #3c6d59", borderRadius: 999, color: "#9DB3A8", fontFamily: "inherit", fontWeight: 600, fontSize: 12, padding: "6px 14px", cursor: "pointer" }}>{exitLabel || "Exit station"}</button>}
+      </div>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "34px 22px 60px" }}>
+        <div style={{ color: "var(--goldSoft)", display: "flex", alignItems: "center", gap: 10, fontSize: 13, letterSpacing: ".2em", textTransform: "uppercase", fontWeight: 600 }}>{icon}{title}</div>
+        <h1 className="mrd-serif" style={{ color: "#F4EFE6", fontSize: "clamp(28px,5vw,44px)", margin: "10px 0 6px", fontWeight: 600, textAlign: "center" }}>{EVENT.name}</h1>
+        {subtitle && <p style={{ color: "#A9C0B5", fontSize: 15.5, margin: "0 0 26px", textAlign: "center", maxWidth: 480 }}>{subtitle}</p>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* "/?station=scan" — fullscreen ticket scanner for a door iPad. Needs the
+   organizer passcode once (stored for the session), because /api/scan is
+   staff-gated. */
+function ScanStation() {
+  const [key, setKeyState] = useState(() => sessionStorage.getItem("doorKey") || "");
+  const [keyInput, setKeyInput] = useState("");
+  const [keyErr, setKeyErr] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [accepted, setAccepted] = useState(0);
+  const [manual, setManual] = useState("");
+  const [exitOpen, setExitOpen] = useState(false);
+  const [exitInput, setExitInput] = useState("");
+
+  const unlock = async () => {
+    if (!keyInput.trim()) return;
+    setChecking(true); setKeyErr("");
+    try {
+      const r = await fetch("/api/registrants", { headers: { "x-organizer-key": keyInput } });
+      if (!r.ok) throw new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`);
+      sessionStorage.setItem("doorKey", keyInput);
+      setKeyState(keyInput);
+    } catch (err) { setKeyErr(err.message); }
+    setChecking(false);
+  };
+
+  if (!key) {
+    return (
+      <StationShell icon={<ScanLine size={15} />} title="Scan Station" subtitle="Staff setup — enter the organizer passcode to arm this station.">
+        <div style={{ display: "flex", gap: 10, width: "min(400px,100%)" }}>
+          <input className="inp" type="password" placeholder="Organizer passcode" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && unlock()} autoFocus />
+          <button className="btn btn-p" onClick={unlock} disabled={checking}>{checking ? "…" : "Arm"}</button>
+        </div>
+        {keyErr && <p style={{ color: "#E2A98F", fontSize: 13.5, marginTop: 12 }}>{keyErr}</p>}
+      </StationShell>
+    );
+  }
+
+  return <ArmedScanStation passcode={key} accepted={accepted} onAccepted={() => setAccepted((n) => n + 1)}
+    manual={manual} setManual={setManual}
+    exitOpen={exitOpen} setExitOpen={setExitOpen} exitInput={exitInput} setExitInput={setExitInput} />;
+}
+
+function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, exitOpen, setExitOpen, exitInput, setExitInput }) {
+  const { videoRef, status, cameraError, redeem } = useTicketScanner(passcode, "scan-station", onAccepted);
+  return (
+    <StationShell
+      icon={<ScanLine size={15} />} title="Scan Station"
+      subtitle="Hold your ticket QR code up to the camera."
+      onExit={() => setExitOpen((v) => !v)}
+    >
+      <div style={{ width: "min(560px,100%)" }}>
+        {exitOpen && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <input className="inp" type="password" placeholder="Passcode to exit" value={exitInput} onChange={(e) => setExitInput(e.target.value)} />
+            <button className="btn btn-p" onClick={() => { if (exitInput === passcode) { window.location.href = "/"; } else { setExitInput(""); } }}>Unlock</button>
+          </div>
+        )}
+        {cameraError ? (
+          <div style={{ fontSize: 14.5, color: "#E2C282", background: "#1a4d3a", border: "1.5px solid #3c6d59", borderRadius: 14, padding: "16px 18px" }}>
+            <AlertTriangle size={15} style={{ display: "inline", verticalAlign: "middle", marginRight: 7 }} />{cameraError}
+          </div>
+        ) : (
+          <video ref={videoRef} style={{ width: "100%", borderRadius: 16, background: "#0C2A20", aspectRatio: "4/3", objectFit: "cover", border: "1.5px solid var(--pineLine)" }} muted playsInline />
+        )}
+        <ScanBanner status={status} big />
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <input
+            className="inp" style={{ flex: 1, fontSize: 16 }} placeholder="No QR? Type the ticket code…"
+            value={manual} onChange={(e) => setManual(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && manual.trim()) { redeem(manual); setManual(""); } }}
+          />
+          <button className="btn btn-p" onClick={() => { if (manual.trim()) { redeem(manual); setManual(""); } }}>Check in</button>
+        </div>
+        <p style={{ color: "#9DB3A8", fontSize: 13, marginTop: 16, textAlign: "center" }}>{accepted} checked in at this station · not registered yet? Use the registration iPad.</p>
+      </div>
+    </StationShell>
+  );
+}
+
+/* "/?station=register" — self-serve walk-in registration for a door iPad.
+   Card payments go through Stripe Checkout (kiosk returns here afterward);
+   otherwise the guest registers now and pays at the cashier — their ticket
+   scans either way, and unpaid tickets flash "payment due" at the scanner. */
+function RegisterStation() {
+  const isStripeReturn = URL_PARAMS.get("status") === "success" && !!URL_PARAMS.get("session_id");
+  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", party: 1 });
+  const [done, setDone] = useState(null); // { token, name, party, paid }
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  // Returning from kiosk card payment: fetch the webhook-minted ticket.
+  useEffect(() => {
+    if (!isStripeReturn) return;
+    const sid = URL_PARAMS.get("session_id");
+    let tries = 0;
+    const poll = async () => {
+      tries++;
+      try {
+        const r = await fetch(`/api/ticket?session_id=${encodeURIComponent(sid)}`);
+        if (r.ok) {
+          const t = await r.json();
+          setDone({ token: t.ticket_token, name: t.name, party: t.party, paid: true });
+          return;
+        }
+      } catch { /* retry */ }
+      if (tries < 12) setTimeout(poll, 2500);
+    };
+    poll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const total = (form.party || 1) * TICKET.price;
+  const setF = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  const reset = () => {
+    setForm({ firstName: "", lastName: "", phone: "", email: "", party: 1 });
+    setDone(null); setErr("");
+    if (isStripeReturn) window.history.replaceState(null, "", "/?station=register");
+  };
+
+  const registerPayAtDoor = async () => {
+    if (!form.firstName.trim()) { setErr("First name is required."); return; }
+    setBusy(true); setErr("");
+    const name = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+    const token = mintTicketToken();
+    try {
+      await dbInsert({
+        name, phone: form.phone.trim() || null, email: form.email.trim() || null,
+        party: form.party || 1, source: "Walk-in", status: "Pending", amount: 0,
+        checked_in: false, ticket_token: token,
+      });
+      setDone({ token, name, party: form.party || 1, paid: false });
+    } catch {
+      setErr("Something went wrong — please see a staff member.");
+    }
+    setBusy(false);
+  };
+
+  const registerPayCard = async () => {
+    if (!form.firstName.trim()) { setErr("First name is required."); return; }
+    setBusy(true); setErr("");
+    sessionStorage.setItem("stationMode", "register");
+    try {
+      await startStripeWalkIn({
+        name: `${form.firstName.trim()} ${form.lastName.trim()}`.trim(),
+        phone: form.phone.trim(), party: form.party || 1, total,
+        lineItems: [{ name: TICKET.name, amount: Math.round(total * 100), quantity: 1 }],
+      });
+    } catch (e2) { setErr(e2.message); setBusy(false); }
+  };
+
+  if (done) {
+    return (
+      <StationShell icon={<Ticket size={15} />} title="Registration" subtitle={done.paid ? "You're all set — welcome!" : "One more stop: pay at the cashier, then you're in."}>
+        <div className="ticket" style={{ margin: 0, width: "min(520px,100%)" }}>
+          <div className="stub"><TicketQR value={done.token} size={140} /></div>
+          <div className="body">
+            <div className="row"><span className="k">Name</span><span className="v">{done.name || "Guest"}</span></div>
+            <div className="row"><span className="k">Party of</span><span className="v">{done.party}</span></div>
+            <div className="row"><span className="k">Status</span><span className="v" style={{ color: done.paid ? "var(--ok)" : "var(--warn)" }}>{done.paid ? "Paid — checked in" : "Payment due at cashier"}</span></div>
+          </div>
+        </div>
+        <p style={{ color: "#A9C0B5", fontSize: 14.5, marginTop: 18, textAlign: "center", maxWidth: 440 }}>
+          {done.paid ? "Enjoy the event!" : "Show this screen at the cashier table. They'll take your payment and scan you in."}
+          {" "}Take a photo of the QR code to keep your ticket.
+        </p>
+        <button className="btn btn-p" style={{ marginTop: 22 }} onClick={reset}>Done — next guest</button>
+      </StationShell>
+    );
+  }
+
+  return (
+    <StationShell icon={<Ticket size={15} />} title="Registration" subtitle={`Register here — ${money(TICKET.price).replace(".00", "")} per person.`}
+      onExit={() => { sessionStorage.removeItem("stationMode"); window.location.href = "/"; }} exitLabel="Staff exit">
+      <div className="card" style={{ width: "min(520px,100%)", display: "grid", gap: 16 }}>
+        <div className="frow">
+          <div className="field"><label>First name <span className="req">*</span></label><input className="inp" value={form.firstName} onChange={(e) => setF("firstName", e.target.value)} placeholder="Jean" /></div>
+          <div className="field"><label>Last name</label><input className="inp" value={form.lastName} onChange={(e) => setF("lastName", e.target.value)} placeholder="Boudreaux" /></div>
+        </div>
+        <div className="frow">
+          <div className="field"><label>Phone</label><input className="inp" value={form.phone} onChange={(e) => setF("phone", e.target.value)} placeholder="(337) 555-0123" inputMode="tel" /></div>
+          <div className="field"><label>Email</label><input className="inp" value={form.email} onChange={(e) => setF("email", e.target.value)} placeholder="jean@example.com" inputMode="email" /></div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div className="field">
+            <label>Party size</label>
+            <div className="qty" style={{ width: "fit-content" }}>
+              <button onClick={() => setF("party", Math.max(1, (form.party || 1) - 1))}><Minus size={17} /></button>
+              <span>{form.party || 1}</span>
+              <button onClick={() => setF("party", Math.min(20, (form.party || 1) + 1))}><Plus size={17} /></button>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 12, color: "var(--inkSoft)", fontWeight: 600 }}>TOTAL</div>
+            <div className="mrd-serif" style={{ fontSize: 30, fontWeight: 600 }}>{money(total)}</div>
+          </div>
+        </div>
+        {err && <div style={{ fontSize: 13.5, color: "#b4471f", fontWeight: 600 }}><AlertTriangle size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{err}</div>}
+        <div style={{ display: "grid", gap: 10 }}>
+          {STRIPE_CONFIG.liveMode && (
+            <button className="btn btn-p" style={{ justifyContent: "center", width: "100%" }} onClick={registerPayCard} disabled={busy}>
+              <CreditCard size={17} /> {busy ? "One moment…" : `Pay ${money(total)} by card`}
+            </button>
+          )}
+          <button className={`btn ${STRIPE_CONFIG.liveMode ? "btn-g" : "btn-p"}`} style={{ justifyContent: "center", width: "100%" }} onClick={registerPayAtDoor} disabled={busy}>
+            <UserPlus size={17} /> {busy ? "One moment…" : "Register — pay at the cashier"}
+          </button>
+        </div>
+      </div>
+    </StationShell>
   );
 }
 
@@ -479,6 +741,9 @@ export default function BoilOnTheBend() {
   useEffect(() => {
     if (IS_DEMO) return;
     const p = new URLSearchParams(window.location.search);
+    // Register-station card payments return with walkin=1 too, but that leg is
+    // handled entirely inside RegisterStation (see the stationMode flag).
+    if (sessionStorage.getItem("stationMode") === "register") return;
     if (p.get("status") === "success") {
       if (p.get("walkin") === "1") {
         const saved = sessionStorage.getItem("doorKey") || "";
@@ -628,6 +893,18 @@ export default function BoilOnTheBend() {
     }
   };
 
+  // Cashier control: settle a pay-at-the-door registration (from the
+  // self-serve registration station) once cash/check/card is collected.
+  const markPaid = async (person) => {
+    const amount = (person.party || 1) * TICKET.price;
+    setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, status: "Paid", amount } : p)));
+    if (person.id && passcode) {
+      try {
+        await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id, status: "Paid", amount }) });
+      } catch { /* keep optimistic local state */ }
+    }
+  };
+
   const deleteRegistrant = async (idx) => {
     const target = roster[idx];
     if (!window.confirm(`Delete ${target.name}? This cannot be undone.`)) return;
@@ -702,6 +979,15 @@ export default function BoilOnTheBend() {
       </div>
     </div></div>
   );
+
+  /* ---------- STATION MODES (locked door iPads) ---------- */
+  if (STATION === "scan") return <ScanStation />;
+  // The register station also owns the Stripe return leg of its own card
+  // payments (the success URL drops the station param, so we key off the
+  // stationMode flag set right before the redirect).
+  if (STATION === "register" || (URL_PARAMS.get("walkin") === "1" && sessionStorage.getItem("stationMode") === "register")) {
+    return <RegisterStation />;
+  }
 
   /* ---------- DOOR CHECK-IN ---------- */
   if (view === "door") {
@@ -789,6 +1075,14 @@ export default function BoilOnTheBend() {
                 <div className="stat"><div className="n">{walkIns.length}</div><div className="l">Walk-ins today</div></div>
               </div>
 
+              {/* Station launchers — put each door iPad in a locked single-purpose mode */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 24, background: "var(--paper)", border: "1.5px solid var(--line)", borderRadius: 14, padding: "13px 16px" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "var(--pine)" }}>iPad stations:</span>
+                <button className="btn btn-g" style={{ padding: "9px 16px", fontSize: 13.5 }} onClick={() => { window.location.href = "/?station=scan"; }}><ScanLine size={15} /> Launch Scan Station</button>
+                <button className="btn btn-g" style={{ padding: "9px 16px", fontSize: 13.5 }} onClick={() => { window.location.href = "/?station=register"; }}><UserPlus size={15} /> Launch Registration Station</button>
+                <span style={{ fontSize: 12, color: "var(--inkSoft)" }}>Pin with iOS Guided Access. Exit needs the passcode.</span>
+              </div>
+
               {doorFlash && <div className="door-flash"><CheckCircle2 size={20} />{doorFlash}</div>}
 
               {/* ---- Check In Pre-Registered ---- */}
@@ -846,6 +1140,15 @@ export default function BoilOnTheBend() {
                               </div>
                             </div>
                             <span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span>
+                            {p.status !== "Paid" && (
+                              <button className="btn btn-g" style={{ padding: "10px 16px", fontSize: 13.5 }} onClick={() => {
+                                markPaid(p);
+                                setDoorFlash(`${p.name} — ${money((p.party || 1) * TICKET.price)} collected, marked paid.`);
+                                setTimeout(() => setDoorFlash(null), 5000);
+                              }}>
+                                Mark paid {money((p.party || 1) * TICKET.price)}
+                              </button>
+                            )}
                             <button
                               className={`door-ci-btn${p.checkedIn ? " done" : ""}`}
                               onClick={() => {

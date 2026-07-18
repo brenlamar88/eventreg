@@ -51,6 +51,9 @@ export default async function handler(req, res) {
       if ("bidder_number" in (req.body || {})) patch.bidder_number = bidder_number ?? null;
       if ("phone" in (req.body || {})) patch.phone = phone ?? null;
       if ("sponsor_id" in (req.body || {})) patch.sponsor_id = sponsor_id ?? null;
+      // Cashier settling a pay-at-the-door registration (station flow)
+      if ("status" in (req.body || {})) patch.status = req.body.status;
+      if ("amount" in (req.body || {})) patch.amount = Number(req.body.amount) || 0;
       const r = await fetch(`${base}?id=eq.${id}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=minimal" },

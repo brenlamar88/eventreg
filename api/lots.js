@@ -37,6 +37,7 @@ export default async function handler(req, res) {
           lot_no: b.lotNo,
           description: b.description || null,
           auction_category: b.category || null,
+          sale_type: b.saleType || "Live",
           consignor_name: b.consignorName || null,
           consignor_ranch: b.consignorRanch || null,
           buyer_name: b.buyerName || null,
