@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Building2, Plus, Database, AlertTriangle, Check, KeyRound, CreditCard, Link2 } from "lucide-react";
+import { Building2, Plus, Database, AlertTriangle, Check, KeyRound, CreditCard, Link2, Users, Trash2, Copy } from "lucide-react";
 import { getAdminKey, setAdminKey } from "./eventConfig.js";
+import { getUser, authHeaders, signOut, onAuthChange } from "./authClient.js";
+import LoginPanel from "./LoginPanel.jsx";
 
 /* ============================================================================
    Platform Admin — /?app=platform
@@ -67,24 +69,46 @@ export default function PlatformAdmin() {
   const [form, setForm] = useState({ slug: "", name: "", contactEmail: "" });
   const [formErr, setFormErr] = useState("");
   const [pcEdit, setPcEdit] = useState({}); // slug -> passcode input
+  const [user, setUser] = useState(null);   // real login (Supabase); alt to passcode
+  const [showLogin, setShowLogin] = useState(false);
 
-  const hdr = () => ({ "Content-Type": "application/json", "x-organizer-key": key });
+  // Signed-in session takes precedence; otherwise fall back to the passcode.
+  // The server accepts either the Bearer session or the x-organizer-key header.
+  const authedHeaders = async () => ({
+    "Content-Type": "application/json",
+    ...(user ? await authHeaders() : { "x-organizer-key": key }),
+  });
+  // Header-only variant for GETs (no JSON body).
+  const readHeaders = async () => (user ? await authHeaders() : { "x-organizer-key": key });
 
   const connect = async () => {
     setDb("loading"); setMsg("");
     try {
-      const r = await fetch("/api/organizations", { headers: { "x-organizer-key": key } });
-      if (!r.ok) throw new Error(r.status === 401 ? "Wrong platform passcode." : `Error ${r.status}`);
+      const r = await fetch("/api/organizations", { headers: await readHeaders() });
+      if (!r.ok) throw new Error(r.status === 401 ? (user ? "This account isn't a platform admin." : "Wrong platform passcode.") : `Error ${r.status}`);
       setOrgs(await r.json());
-      setAdminKey(key);
+      if (!user) setAdminKey(key);
       setDb("live");
     } catch (e) { setDb("offline"); setMsg(e.message); }
   };
 
-  useEffect(() => { if (getAdminKey()) connect(); /* eslint-disable-next-line */ }, []);
+  // Load any existing real-login session, and auto-connect once known.
+  useEffect(() => {
+    getUser().then((u) => { if (u) { setUser(u); setShowLogin(false); } });
+    const { data } = onAuthChange((session) => {
+      setUser(session?.user ? { id: session.user.id, email: session.user.email } : null);
+    });
+    return () => data?.subscription?.unsubscribe?.();
+  }, []);
+
+  // Connect on mount when a credential is already available (passcode or session).
+  useEffect(() => {
+    if (db === "idle" && (getAdminKey() || user)) connect();
+    // eslint-disable-next-line
+  }, [user]);
 
   const refresh = async () => {
-    try { const r = await fetch("/api/organizations", { headers: { "x-organizer-key": key } }); if (r.ok) setOrgs(await r.json()); } catch {}
+    try { const r = await fetch("/api/organizations", { headers: await readHeaders() }); if (r.ok) setOrgs(await r.json()); } catch {}
   };
 
   const createOrg = async () => {
@@ -93,7 +117,7 @@ export default function PlatformAdmin() {
     if (!SLUG_RE.test(slug)) { setFormErr("Slug: lowercase letters, numbers, dashes; start alphanumeric; ≤41 chars."); return; }
     if (!form.name.trim()) { setFormErr("Name is required."); return; }
     try {
-      const r = await fetch("/api/organizations", { method: "POST", headers: hdr(), body: JSON.stringify({ slug, name: form.name.trim(), contactEmail: form.contactEmail.trim() || null }) });
+      const r = await fetch("/api/organizations", { method: "POST", headers: await authedHeaders(), body: JSON.stringify({ slug, name: form.name.trim(), contactEmail: form.contactEmail.trim() || null }) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { setFormErr(j.error || `Error ${r.status}`); return; }
       setForm({ slug: "", name: "", contactEmail: "" });
@@ -104,7 +128,7 @@ export default function PlatformAdmin() {
   const savePasscode = async (slug) => {
     const pc = (pcEdit[slug] || "").trim();
     try {
-      const r = await fetch(`/api/organizations?slug=${encodeURIComponent(slug)}`, { method: "PUT", headers: hdr(), body: JSON.stringify({ ownerPasscode: pc }) });
+      const r = await fetch(`/api/organizations?slug=${encodeURIComponent(slug)}`, { method: "PUT", headers: await authedHeaders(), body: JSON.stringify({ ownerPasscode: pc }) });
       if (r.ok) { setPcEdit((p) => ({ ...p, [slug]: "" })); await refresh(); }
     } catch {}
   };
@@ -115,13 +139,67 @@ export default function PlatformAdmin() {
   const stripeAction = async (slug, path) => {
     setBusySlug(slug + path);
     try {
-      const r = await fetch(`/api/${path}?client=${encodeURIComponent(slug)}`, { method: "POST", headers: hdr(), body: JSON.stringify({}) });
+      const r = await fetch(`/api/${path}?client=${encodeURIComponent(slug)}`, { method: "POST", headers: await authedHeaders(), body: JSON.stringify({}) });
       const j = await r.json().catch(() => ({}));
       if (r.status === 503) { setMsg(j.hint || "Stripe isn't configured yet."); return; }
       if (!r.ok) { setMsg(j.error || `Error ${r.status}`); return; }
       if (j.url) window.location.href = j.url;  // Stripe-hosted onboarding / checkout
     } catch (e) { setMsg(e.message); }
     finally { setBusySlug(""); }
+  };
+
+  // ---- Team management (per org) -------------------------------------------
+  const [teamOpen, setTeamOpen] = useState({});   // slug -> bool
+  const [team, setTeam] = useState({});           // slug -> { members, invites }
+  const [teamMsg, setTeamMsg] = useState({});     // slug -> string
+  const [inviteForm, setInviteForm] = useState({}); // slug -> { email, role }
+  const [inviteLink, setInviteLink] = useState({}); // slug -> link
+
+  const loadTeam = async (slug) => {
+    setTeamMsg((m) => ({ ...m, [slug]: "" }));
+    try {
+      const r = await fetch(`/api/members?client=${encodeURIComponent(slug)}`, { headers: await readHeaders() });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setTeamMsg((m) => ({ ...m, [slug]: j.error || `Error ${r.status}` })); return; }
+      setTeam((t) => ({ ...t, [slug]: { members: j.members || [], invites: j.invites || [] } }));
+    } catch (e) { setTeamMsg((m) => ({ ...m, [slug]: e.message })); }
+  };
+
+  const toggleTeam = (slug) => {
+    setTeamOpen((o) => {
+      const next = !o[slug];
+      if (next && !team[slug]) loadTeam(slug);
+      if (next && !inviteForm[slug]) setInviteForm((f) => ({ ...f, [slug]: { email: "", role: "staff" } }));
+      return { ...o, [slug]: next };
+    });
+  };
+
+  const sendInvite = async (slug) => {
+    const f = inviteForm[slug] || { email: "", role: "staff" };
+    if (!f.email.trim()) return;
+    setTeamMsg((m) => ({ ...m, [slug]: "" }));
+    setInviteLink((l) => ({ ...l, [slug]: "" }));
+    try {
+      const r = await fetch(`/api/members?client=${encodeURIComponent(slug)}`, {
+        method: "POST", headers: await authedHeaders(),
+        body: JSON.stringify({ email: f.email.trim(), role: f.role }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setTeamMsg((m) => ({ ...m, [slug]: j.error || `Error ${r.status}` })); return; }
+      if (j.inviteLink) setInviteLink((l) => ({ ...l, [slug]: j.inviteLink }));
+      setInviteForm((ff) => ({ ...ff, [slug]: { email: "", role: f.role } }));
+      await loadTeam(slug);
+    } catch (e) { setTeamMsg((m) => ({ ...m, [slug]: e.message })); }
+  };
+
+  const removeMember = async (slug, userId) => {
+    try {
+      const r = await fetch(`/api/members?client=${encodeURIComponent(slug)}`, {
+        method: "DELETE", headers: await authedHeaders(), body: JSON.stringify({ userId }),
+      });
+      if (r.ok) await loadTeam(slug);
+      else { const j = await r.json().catch(() => ({})); setTeamMsg((m) => ({ ...m, [slug]: j.error || `Error ${r.status}` })); }
+    } catch (e) { setTeamMsg((m) => ({ ...m, [slug]: e.message })); }
   };
 
   const dotColor = db === "live" ? "var(--ok)" : db === "offline" ? "var(--warn)" : "#9DB3A8";
@@ -135,11 +213,26 @@ export default function PlatformAdmin() {
       </div></div>
 
       <div className="wrap panel">
-        <div className="settings">
-          <span style={{ fontSize: 12.5, fontWeight: 600 }}><span className="dot" style={{ background: dotColor }} />{db === "live" ? "Connected" : db === "offline" ? "Not connected" : "Enter platform passcode"}</span>
-          <input className="pwd" type="password" placeholder="Platform master passcode" value={key} onChange={(e) => setKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && connect()} />
-          <button className="btn" onClick={connect} disabled={db === "loading"}><Database size={15} />{db === "loading" ? "…" : "Connect"}</button>
+        <div className="settings" style={{ justifyContent: "space-between" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600 }}><span className="dot" style={{ background: dotColor }} />{db === "live" ? "Connected" : db === "offline" ? "Not connected" : user ? "Signed in — connecting" : "Enter platform passcode"}</span>
+          {user ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Signed in as {user.email}</span>
+              <button className="btn ghost sm" onClick={() => { signOut(); setDb("idle"); setOrgs([]); }}>Sign out</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <input className="pwd" type="password" placeholder="Platform master passcode" value={key} onChange={(e) => setKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && connect()} />
+              <button className="btn" onClick={connect} disabled={db === "loading"}><Database size={15} />{db === "loading" ? "…" : "Connect"}</button>
+              <button className="btn ghost sm" onClick={() => setShowLogin((v) => !v)}>Sign in with email instead</button>
+            </div>
+          )}
         </div>
+        {showLogin && !user && (
+          <div className="addcard" style={{ marginTop: -6 }}>
+            <LoginPanel onSignedIn={() => setShowLogin(false)} note="Platform admins (owners of the house org) can sign in with a magic link instead of the master passcode." />
+          </div>
+        )}
         {msg && <div className="hint" style={{ color: "var(--warn)", marginTop: -10, marginBottom: 16 }}><AlertTriangle size={14} />{msg}</div>}
 
         {db === "live" && (
@@ -186,6 +279,51 @@ export default function PlatformAdmin() {
                   </button>
                   <span className="hint" style={{ marginLeft: 4 }}>Payouts = they collect ticket money (minus your fee). Subscription = your platform fee.</span>
                 </div>
+                <div className="org-row">
+                  <button className="btn ghost sm" onClick={() => toggleTeam(o.slug)}><Users size={13} /> {teamOpen[o.slug] ? "Hide team" : "Manage team"}</button>
+                  <span className="hint" style={{ marginLeft: 4 }}>Invite real logins (magic link) to run this org's events. Passcode still works too.</span>
+                </div>
+                {teamOpen[o.slug] && (
+                  <div style={{ marginTop: 10, borderTop: "1px dashed var(--line)", paddingTop: 12 }}>
+                    {teamMsg[o.slug] && <div className="hint" style={{ color: "var(--warn)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}><AlertTriangle size={13} />{teamMsg[o.slug]}</div>}
+                    {(team[o.slug]?.members?.length || 0) === 0 && (team[o.slug]?.invites?.length || 0) === 0 && (
+                      <div className="hint" style={{ marginBottom: 10 }}>No team members yet — send the first invite below.</div>
+                    )}
+                    {team[o.slug]?.members?.map((m) => (
+                      <div className="org-row" key={m.user_id} style={{ marginTop: 0, justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 13 }}>{m.email} <span className="chip ok" style={{ marginLeft: 6 }}>{m.role}</span></span>
+                        <button className="btn ghost sm" onClick={() => removeMember(o.slug, m.user_id)}><Trash2 size={12} /> Remove</button>
+                      </div>
+                    ))}
+                    {team[o.slug]?.invites?.map((iv, i) => (
+                      <div className="org-row" key={`iv-${i}`} style={{ marginTop: 0 }}>
+                        <span style={{ fontSize: 13, color: "var(--inkSoft)" }}>{iv.email} <span className="chip no" style={{ marginLeft: 6 }}>{iv.role} · pending</span></span>
+                      </div>
+                    ))}
+                    <div className="org-row">
+                      <input className="pwd" type="email" placeholder="new.member@org.org" style={{ width: 200 }}
+                        value={inviteForm[o.slug]?.email || ""}
+                        onChange={(e) => setInviteForm((f) => ({ ...f, [o.slug]: { ...(f[o.slug] || { role: "staff" }), email: e.target.value } }))}
+                        onKeyDown={(e) => e.key === "Enter" && sendInvite(o.slug)} />
+                      <select className="pwd" style={{ width: "auto" }}
+                        value={inviteForm[o.slug]?.role || "staff"}
+                        onChange={(e) => setInviteForm((f) => ({ ...f, [o.slug]: { ...(f[o.slug] || { email: "" }), role: e.target.value } }))}>
+                        <option value="owner">owner</option>
+                        <option value="admin">admin</option>
+                        <option value="staff">staff</option>
+                        <option value="door">door</option>
+                      </select>
+                      <button className="btn sm" disabled={!(inviteForm[o.slug]?.email || "").trim()} onClick={() => sendInvite(o.slug)}><Plus size={13} /> Send invite</button>
+                    </div>
+                    {inviteLink[o.slug] && (
+                      <div className="org-row" style={{ marginTop: 6 }}>
+                        <input className="pwd" readOnly style={{ width: 320 }} value={inviteLink[o.slug]} onFocus={(e) => e.target.select()} />
+                        <button className="btn ghost sm" onClick={() => { try { navigator.clipboard.writeText(inviteLink[o.slug]); } catch {} }}><Copy size={12} /> Copy link</button>
+                        <span className="hint">Share this with the invitee — it signs them in and joins them.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
 

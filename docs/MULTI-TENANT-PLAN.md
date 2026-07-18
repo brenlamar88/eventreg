@@ -38,10 +38,13 @@ through `event_id → org_id`.
    (`/?app=platform`) to create client orgs and set their owner passcode.
    (Real Supabase Auth logins + `memberships`/`invitations` replace the
    passcode tiers in a later stage; the passcode model is the interim.)
-2. **Auth + RLS.** Supabase Auth login; enable RLS on every tenant table with
-   policies keyed on membership (join through `event_id → org_id`); index
-   `org_id`/`event_id`; keep the service-role key server-only. Replaces the
-   passcode model (per-event passcodes stay as a door-staff convenience).
+2. **Auth + team.** ✅ DONE (Phase J, `db/phase-j.sql`). Supabase Auth
+   magic-link login + `memberships`/`invitations`; every organizer API accepts
+   a signed-in session (Bearer) OR a passcode; roles owner/admin/staff/door;
+   invite teammates by email from Platform Admin. Additive — passcodes still
+   work. Still open: enforcing Postgres RLS by membership on the data tables
+   (today the service role mediates all access behind the authorize check),
+   and per-role gating finer than "any membership authorizes the org."
 3. **Org console + onboarding.** Self-serve signup → create org → invite team
    (owner/admin/staff/door) → "create your first event." An org-level dashboard
    above the per-event console.
