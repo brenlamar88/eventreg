@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.7",
     "@zxing/browser": "^0.1.5",
     "lucide-react": "^0.408.0",
     "passkit-generator": "^3.5.7",

@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 import { requestedEvent } from "./event.js";
 import { requestedOrgSlug } from "./org.js";
+import { sessionUser, roleForOrgSlug, isPlatformAdmin } from "./session.js";
 
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -76,7 +77,38 @@ export async function authorizeOrganizerKey(req, key, { masterOnly = false } = {
   return false;
 }
 
-// The common case: key comes in the x-organizer-key header.
+// The org slug that owns an event (for session/role checks).
+async function eventOrgSlug(eventId, now) {
+  return cached("evorg:" + eventId, async () => {
+    const r = await fetch(
+      `${SB}/rest/v1/event_settings?event_id=eq.${encodeURIComponent(eventId)}&select=organizations(slug)&limit=1`,
+      { headers: H }
+    );
+    if (!r.ok) return null;
+    return (await r.json())[0]?.organizations?.slug || null;
+  }, now);
+}
+
+// A logged-in Supabase user authorizes if they have the right membership.
+// Platform admins (owners of the platform org) pass everything, incl.
+// masterOnly. Otherwise any membership in the request's target org passes
+// non-master actions — same coarseness as that org's owner passcode. (Finer
+// per-role gating can tighten this later without weakening it.)
+async function authorizeSession(req, { masterOnly = false } = {}) {
+  const user = await sessionUser(req);
+  if (!user) return false;
+  if (await isPlatformAdmin(user.id)) return true;
+  if (masterOnly) return false;
+  const now = Date.now();
+  const slug = requestedOrgSlug(req) || (await eventOrgSlug(requestedEvent(req), now));
+  if (!slug) return false;
+  const role = await roleForOrgSlug(user.id, slug);
+  return !!role;   // owner | admin | staff | door
+}
+
+// The common case: a request authenticates with EITHER the passcode header
+// (x-organizer-key) OR a logged-in Supabase session (Authorization: Bearer).
 export async function authorizeOrganizer(req, opts) {
-  return authorizeOrganizerKey(req, req.headers["x-organizer-key"], opts);
+  if (await authorizeOrganizerKey(req, req.headers["x-organizer-key"], opts)) return true;
+  return authorizeSession(req, opts);
 }

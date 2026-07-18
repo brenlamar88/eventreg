@@ -198,6 +198,38 @@ only reach that chapter's data:
   against the master key or the requested event's own passcode.
 - Run `db/phase-f.sql` once (after `db/phase-e.sql`).
 
+### Real logins + team invites (Phase J, additive)
+
+Organizers can now sign in with a real account (Supabase Auth **magic link** —
+passwordless) instead of sharing a passcode, and invite teammates by email
+with a role. **Passcodes still work** — login is an additional path, not a
+replacement, so nothing breaks.
+
+- A user belongs to organizations through `memberships` (roles: **owner /
+  admin / staff / door**). **Platform admins** are owners of the seeded
+  `house` org.
+- Every organizer API accepts **either** the `x-organizer-key` passcode
+  **or** an `Authorization: Bearer <supabase token>` from a signed-in user
+  whose membership authorizes the action. Cross-org access is denied.
+- **Invite a teammate** from Platform Admin → an org's **Team** section:
+  enter their email + role; they get a magic-link invite; signing in and
+  accepting creates their membership. The invite link is also shown to copy.
+- Accept flow lives at `/?invite=<token>&client=<slug>`.
+
+Setup:
+1. Run `db/phase-j.sql` (after `db/phase-i.sql`) — adds `memberships` +
+   `invitations`.
+2. In Supabase → **Authentication**: ensure Email is enabled (magic link).
+   For production email volume, configure SMTP (Supabase's default sender is
+   rate-limited).
+3. Make yourself a **platform admin**: sign in once, then insert a membership
+   row — `insert into memberships (user_id, org_id, role) select (select id
+   from auth.users where email='you@example.com'), (select id from
+   organizations where slug='house'), 'owner';` — after which you can manage
+   everything by login instead of the master passcode.
+4. (Optional) set `SUPABASE_ANON_KEY` in Vercel; otherwise the service key is
+   used to validate tokens.
+
 ### Stripe Connect payouts + Billing (Phase I, env-gated)
 
 Two independent money flows, both managed per client organization on the

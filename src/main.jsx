@@ -17,7 +17,9 @@ async function boot() {
   applyTheme(cfg);
   document.title = cfg.eventName;
 
-  const mod = params.get("ticket")
+  const mod = params.get("invite")
+    ? await import("./AcceptInvite.jsx")
+    : params.get("ticket")
     ? await import("./TicketPage.jsx")
     : app === "settlement"
     ? await import("./AuctionSettlement.jsx")
