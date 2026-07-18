@@ -4,9 +4,9 @@ import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
   CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download,
 } from "lucide-react";
-import OrganizerNav from "./OrganizerNav.jsx";
+import AdminShell from "./AdminShell.jsx";
 import { DEMO_LOTS, DEMO_PEOPLE, DEMO_REGISTRANTS, DEMO_SPONSORS, DEMO_LOT_FEE } from "./demoData.js";
-import { getEventConfig, withEvent } from "./eventConfig.js";
+import { getEventConfig, withEvent, setAdminKey, getAdminKey } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 const CFG = getEventConfig();
@@ -164,7 +164,7 @@ export default function AuctionSettlement() {
   const [eventFee, setEventFee] = useState(50);
   const [lots, setLots] = useState([]);
   const [people, setPeople] = useState([]);
-  const [passcode, setPasscode] = useState("");
+  const [passcode, setPasscode] = useState(getAdminKey());
   const [db, setDb] = useState("idle");      // idle | loading | live | offline
   const [msg, setMsg] = useState("");
   const [regLoading, setRegLoading] = useState(false);
@@ -273,6 +273,7 @@ export default function AuctionSettlement() {
       const { lots: dbLots, lotFee } = await lr.json();
       setLots(dbLots.map(dbLotToUI)); setEventFee(lotFee);
       try { const rr = await fetch(withEvent("/api/registrants"), { headers: hdr() }); if (rr.ok) { const rows = await rr.json(); const seen = new Set(); const ppl = []; rows.forEach((x) => { const k = (x.name || "").toLowerCase(); if (x.name && !seen.has(k)) { seen.add(k); ppl.push({ name: x.name, ranch: x.ranch || "", bidderNo: x.bidder_number || "", email: x.email || "" }); } }); setPeople(ppl); } } catch {}
+      setAdminKey(passcode);
       setDb("live"); setMsg(`Connected — ${dbLots.length} lot${dbLots.length === 1 ? "" : "s"} loaded.`);
     } catch (e) {
       setDb("offline"); setMsg(`Live DB unavailable (${e.message}) — working locally. Wired up once deployed.`);
@@ -407,7 +408,7 @@ export default function AuctionSettlement() {
   const dotColor = db === "live" ? "var(--ok)" : db === "offline" ? "var(--warn)" : "#9DB3A8";
 
   return (
-    <div className="ewa"><Styles /><OrganizerNav />
+    <AdminShell active="settlement"><div className="ewa"><Styles />
       <datalist id="people-list">{people.map((p) => <option key={p.name} value={p.bidderNo ? `#${p.bidderNo} - ${p.name}` : p.name} />)}</datalist>
       <div className="head"><div className="wrap head-in">
         <div className="eyebrow">{`${CFG.orgName} · 2026`}</div>
@@ -803,6 +804,6 @@ export default function AuctionSettlement() {
           </>);
         })()}
       </div>
-    </div>
+    </div></AdminShell>
   );
 }

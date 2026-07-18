@@ -3,8 +3,8 @@ import {
   Database, AlertTriangle, Check, Palette, Type, DollarSign, Image, Save,
   RefreshCw, Eye, Info, CalendarDays, Plus, Star, LayoutGrid,
 } from "lucide-react";
-import OrganizerNav from "./OrganizerNav.jsx";
-import { DEFAULTS, applyTheme, withEvent, EVENT_PARAM, getEventConfig } from "./eventConfig.js";
+import AdminShell from "./AdminShell.jsx";
+import { DEFAULTS, applyTheme, withEvent, EVENT_PARAM, getEventConfig, setAdminKey, getAdminKey } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 const LS_KEY = "eventreg-config-v1" + (EVENT_PARAM ? ":" + EVENT_PARAM : "");
@@ -90,7 +90,7 @@ const parsePresets = (text) =>
   String(text || "").split(",").map((s) => Number(s.trim())).filter((n) => isFinite(n) && n > 0);
 
 export default function EventSetup() {
-  const [passcode, setPasscode] = useState("");
+  const [passcode, setPasscode] = useState(getAdminKey());
   const [db, setDb] = useState("idle");
   const [msg, setMsg] = useState("");
   const [form, setForm] = useState(blankForm);
@@ -152,6 +152,7 @@ export default function EventSetup() {
       setColors(rowToColors(row));
       setLogoUrl(row.logo_url || null);
       await refreshEvents();
+      setAdminKey(passcode);
       setDb("live");
       setMsg("Connected — current configuration loaded.");
     } catch (e) {
@@ -273,7 +274,7 @@ export default function EventSetup() {
   );
 
   return (
-    <div className="spo"><Styles /><OrganizerNav />
+    <AdminShell active="setup"><div className="spo"><Styles />
       <div className="head"><div className="wrap head-in">
         <div className="eyebrow">Organizer Tools</div>
         <h1 className="serif">Event Setup</h1>
@@ -452,6 +453,6 @@ export default function EventSetup() {
           <span>Empty fields fall back to the built-in defaults. Colors, names, and pricing apply everywhere: registration, door, stations, ticket pages, sponsorships, and settlement.</span>
         </div>
       </div>
-    </div>
+    </div></AdminShell>
   );
 }

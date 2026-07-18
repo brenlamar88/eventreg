@@ -63,6 +63,17 @@ export function eventLink(href) {
   return href + (href.includes("?") ? "&" : "?") + "event=" + encodeURIComponent(EVENT_PARAM);
 }
 
+// Shared organizer session: once you sign in on any admin screen the passcode
+// is remembered for the tab, so you don't retype it moving between modules.
+// sessionStorage (not local) so it clears when the tab closes.
+const ADMIN_KEY = "eventreg-admin-key";
+export function getAdminKey() {
+  try { return sessionStorage.getItem(ADMIN_KEY) || ""; } catch { return ""; }
+}
+export function setAdminKey(key) {
+  try { key ? sessionStorage.setItem(ADMIN_KEY, key) : sessionStorage.removeItem(ADMIN_KEY); } catch { /* private mode */ }
+}
+
 const pick = (v, d) => (v === null || v === undefined || v === "" ? d : v);
 
 function fromRow(row) {
