@@ -838,6 +838,19 @@ export default function BoilOnTheBend() {
   const [pending, setPending] = useState(0);
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [conflicts, setConflicts] = useState([]);
+
+  const [roster, setRoster] = useState(SAMPLE_ROSTER);
+  const [sponsors, setSponsors] = useState([]);
+  const [search, setSearch] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importMsg, setImportMsg] = useState("");
+  const [passcode, setPasscode] = useState("");
+  const [dbState, setDbState] = useState("idle"); // idle | loading | live | offline
+  const [dbMsg, setDbMsg] = useState("");
+
+  // Offline sync helpers + the flush loop. Declared AFTER `passcode` because
+  // the effect's dependency array reads it — a const's temporal dead zone
+  // would otherwise crash the whole component in the production build.
   const refreshPending = async () => {
     setPending(await pendingCount());
     setLastSyncAt(await getMeta("lastSyncAt"));
@@ -863,15 +876,6 @@ export default function BoilOnTheBend() {
     return () => { window.removeEventListener("online", onOnline); clearInterval(iv); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passcode]);
-
-  const [roster, setRoster] = useState(SAMPLE_ROSTER);
-  const [sponsors, setSponsors] = useState([]);
-  const [search, setSearch] = useState("");
-  const [importText, setImportText] = useState("");
-  const [importMsg, setImportMsg] = useState("");
-  const [passcode, setPasscode] = useState("");
-  const [dbState, setDbState] = useState("idle"); // idle | loading | live | offline
-  const [dbMsg, setDbMsg] = useState("");
 
   // Door view state
   const [doorUnlocked, setDoorUnlocked] = useState(false);
