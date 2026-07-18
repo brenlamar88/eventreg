@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Settings, Users, Heart, ScanLine, FileText, LayoutGrid, ExternalLink,
-  ChevronDown, LogOut, Menu, X,
+  ChevronDown, LogOut, Menu, X, Building2,
 } from "lucide-react";
 import { getEventConfig, eventLink, getAdminKey, setAdminKey } from "./eventConfig.js";
 
@@ -132,6 +132,7 @@ export default function AdminShell({ active, children }) {
         ))}
       </nav>
       <div className="ash-foot">
+        <a href="/?app=platform"><Building2 size={14} /> Organizations</a>
         <a href={eventLink("/")} target="_blank" rel="noreferrer"><ExternalLink size={14} /> View public page</a>
         <button onClick={() => { setAdminKey(""); window.location.href = eventLink("/"); }}><LogOut size={14} /> Sign out</button>
       </div>
