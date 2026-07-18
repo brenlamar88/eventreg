@@ -23,7 +23,12 @@ const PASSCODE = process.env.ORGANIZER_PASSCODE;
 const TABLE = "registrants";
 
 export default async function handler(req, res) {
-  if (!(await authorizeOrganizer(req))) {
+  // Reading the roster and toggling check-in are door (checkin) actions;
+  // editing bidder #/phone/sponsor/status or deleting requires manage.
+  const bodyKeys = Object.keys(req.body || {}).filter((k) => k !== "id");
+  const checkinOnlyPatch = req.method === "PATCH" && bodyKeys.every((k) => k === "checked_in" || k === "checked_in_at");
+  const capability = req.method === "GET" || checkinOnlyPatch ? "checkin" : "manage";
+  if (!(await authorizeOrganizer(req, { capability }))) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 

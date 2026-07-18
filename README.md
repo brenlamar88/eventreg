@@ -198,6 +198,27 @@ only reach that chapter's data:
   against the master key or the requested event's own passcode.
 - Run `db/phase-f.sql` once (after `db/phase-e.sql`).
 
+### Capability-based access + RLS lockdown (Phase K, hardening)
+
+Access is now **least-privilege by capability**, not all-or-nothing. Three
+levels, and each endpoint requires the right one:
+
+| Level | Can do | Granted to |
+|---|---|---|
+| **checkin** | scan tickets, read the roster, toggle check-in | event door passcode; `door`-role member |
+| **manage** | edit roster / sponsors / lots / settlement / branding, mark paid, delete | org owner passcode; `owner`/`admin`/`staff` member |
+| **platform** | manage organizations, billing, payouts, create events, set defaults | master passcode; platform admin |
+
+So a **door passcode can only check people in** — it can no longer reach
+settlement, delete registrants, or manage sponsors. Higher levels include
+lower ones. Verified with a full capability-matrix test.
+
+`db/phase-k.sql` (after `db/phase-j.sql`) is a defense-in-depth **RLS
+lockdown**: it enables Row-Level Security on every tenant table so the
+browser publishable key can do nothing but insert a public registration, and
+prints any anon policy that grants more (should be none). The service role
+used by `/api/*` bypasses RLS and is unaffected.
+
 ### Real logins + team invites (Phase J, additive)
 
 Organizers can now sign in with a real account (Supabase Auth **magic link** —
