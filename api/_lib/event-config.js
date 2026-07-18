@@ -15,6 +15,7 @@
 // ---------------------------------------------------------------------------
 import { requestedEvent, isValidSlug, DEFAULT_EVENT, urlParam } from "./event.js";
 import { authorizeOrganizer } from "./auth.js";
+import { writeEventSettings } from "./settings-write.js";
 
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -134,14 +135,12 @@ export default async function handler(req, res) {
       }
       const makeDefault = b.isDefault === true;
       if (!Object.keys(patch).length && !makeDefault) return res.status(400).json({ error: "Nothing to update" });
-      patch.updated_at = new Date().toISOString();
 
-      const r = await fetch(`${SB}/rest/v1/event_settings?on_conflict=event_id`, {
-        method: "POST",
-        headers: { ...H, Prefer: "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ event_id: eventId, ...patch }),
-      });
-      if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
+      const w = await writeEventSettings(eventId, patch);
+      if (!w.ok) {
+        console.error("event-config write failed:", w.status, w.error);
+        return res.status(500).json({ error: "Could not save settings", detail: w.error });
+      }
 
       if (makeDefault) {
         // Exactly one default: clear the flag everywhere, then set it here.

@@ -231,7 +231,7 @@ export default function EventSetup() {
       const r = await fetch(withEvent("/api/event-config"), { method: "PUT", headers: hdr(), body: JSON.stringify(body) });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || `Error ${r.status}`);
+        throw new Error([j.error, j.detail].filter(Boolean).join(" — ") || `Error ${r.status}`);
       }
       // Drop the cached config so the next boot refetches the fresh row.
       try { localStorage.removeItem(LS_KEY); } catch {}

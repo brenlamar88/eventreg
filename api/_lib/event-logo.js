@@ -5,6 +5,7 @@
 // Gated by x-organizer-key header. Same pattern as api/sponsor-logo.js.
 import { requestedEvent } from "./event.js";
 import { authorizeOrganizer } from "./auth.js";
+import { writeEventSettings } from "./settings-write.js";
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -36,14 +37,10 @@ export default async function handler(req, res) {
     }
 
     const logoUrl = `${SB}/storage/v1/object/public/event-assets/${path}`;
-    const pr = await fetch(`${SB}/rest/v1/event_settings?on_conflict=event_id`, {
-      method: "POST",
-      headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify({ event_id: eventId, logo_url: logoUrl, updated_at: new Date().toISOString() }),
-    });
-    if (!pr.ok) {
-      console.error("event-logo patch error:", pr.status, await pr.text().catch(() => ""));
-      return res.status(500).json({ error: "Uploaded but could not update settings" });
+    const w = await writeEventSettings(eventId, { logo_url: logoUrl });
+    if (!w.ok) {
+      console.error("event-logo write error:", w.status, w.error);
+      return res.status(500).json({ error: "Uploaded but could not update settings", detail: w.error });
     }
     return res.status(200).json({ ok: true, logoUrl });
   } catch (e) {

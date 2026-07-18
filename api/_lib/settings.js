@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 import { requestedEvent } from "./event.js";
 import { authorizeOrganizer } from "./auth.js";
+import { writeEventSettings } from "./settings-write.js";
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -23,12 +24,9 @@ export default async function handler(req, res) {
     }
     if (req.method === "PUT") {
       const { lotFee } = req.body || {};
-      const r = await fetch(`${base}?on_conflict=event_id`, {
-        method: "POST",
-        headers: { ...H, Prefer: "resolution=merge-duplicates,return=minimal" },
-        body: JSON.stringify({ event_id: requestedEvent(req), lot_fee: Number(lotFee) || 0, updated_at: new Date().toISOString() }),
-      });
-      return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
+      const w = await writeEventSettings(requestedEvent(req), { lot_fee: Number(lotFee) || 0 });
+      if (!w.ok) console.error("settings write failed:", w.status, w.error);
+      return res.status(w.ok ? 200 : 500).json({ ok: w.ok, detail: w.ok ? undefined : w.error });
     }
     res.setHeader("Allow", "GET, PUT");
     return res.status(405).json({ error: "Method not allowed" });
