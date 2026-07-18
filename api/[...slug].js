@@ -21,6 +21,8 @@ import googleWallet from "./_lib/google-wallet.js";
 import lotCheckout from "./_lib/lot-checkout.js";
 import lots from "./_lib/lots.js";
 import organizations from "./_lib/organizations.js";
+import connect from "./_lib/connect.js";
+import billing from "./_lib/billing.js";
 import registrants from "./_lib/registrants.js";
 import scan from "./_lib/scan.js";
 import scanBatch from "./_lib/scan-batch.js";
@@ -39,6 +41,8 @@ const ROUTES = {
   "lot-checkout": lotCheckout,
   lots,
   organizations,
+  connect,
+  billing,
   registrants,
   scan,
   "scan-batch": scanBatch,

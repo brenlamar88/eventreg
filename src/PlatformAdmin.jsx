@@ -109,6 +109,21 @@ export default function PlatformAdmin() {
     } catch {}
   };
 
+  // Stripe Connect (payouts) + Billing (your subscription). Both env-gated on
+  // the server — a friendly message shows if Stripe isn't configured yet.
+  const [busySlug, setBusySlug] = useState("");
+  const stripeAction = async (slug, path) => {
+    setBusySlug(slug + path);
+    try {
+      const r = await fetch(`/api/${path}?client=${encodeURIComponent(slug)}`, { method: "POST", headers: hdr(), body: JSON.stringify({}) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 503) { setMsg(j.hint || "Stripe isn't configured yet."); return; }
+      if (!r.ok) { setMsg(j.error || `Error ${r.status}`); return; }
+      if (j.url) window.location.href = j.url;  // Stripe-hosted onboarding / checkout
+    } catch (e) { setMsg(e.message); }
+    finally { setBusySlug(""); }
+  };
+
   const dotColor = db === "live" ? "var(--ok)" : db === "offline" ? "var(--warn)" : "#9DB3A8";
 
   return (
@@ -161,6 +176,15 @@ export default function PlatformAdmin() {
                   <input className="pwd" type="password" placeholder={o.has_passcode ? "New owner passcode…" : "Set owner passcode…"} value={pcEdit[o.slug] || ""} onChange={(e) => setPcEdit((p) => ({ ...p, [o.slug]: e.target.value }))} />
                   <button className="btn sm" disabled={!(pcEdit[o.slug] || "").trim()} onClick={() => savePasscode(o.slug)}><Check size={13} /> Save passcode</button>
                   <span className="hint" style={{ marginLeft: 4 }}>Give this to the org's admin — it unlocks all of their events.</span>
+                </div>
+                <div className="org-row">
+                  <button className="btn ghost sm" disabled={busySlug === o.slug + "connect"} onClick={() => stripeAction(o.slug, "connect")}>
+                    <Link2 size={13} /> {o.stripe_connected ? (o.payouts_enabled ? "Payouts ready — manage" : "Finish payout setup") : "Set up payouts (Stripe)"}
+                  </button>
+                  <button className="btn ghost sm" disabled={busySlug === o.slug + "billing"} onClick={() => stripeAction(o.slug, "billing")}>
+                    <CreditCard size={13} /> {o.billing_active ? "Manage subscription" : "Start subscription"}
+                  </button>
+                  <span className="hint" style={{ marginLeft: 4 }}>Payouts = they collect ticket money (minus your fee). Subscription = your platform fee.</span>
                 </div>
               </div>
             ))}
