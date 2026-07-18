@@ -11,7 +11,10 @@
 // ---------------------------------------------------------------------------
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Lazy init: this module is bundled into the API router, so a missing key
+// must fail this route at request time, not every route at import time.
+let _stripe;
+const stripe = () => (_stripe ??= new Stripe(process.env.STRIPE_SECRET_KEY));
 const PASS   = process.env.ORGANIZER_PASSCODE;
 
 export default async function handler(req, res) {
@@ -25,7 +28,7 @@ export default async function handler(req, res) {
     (req.headers.origin || `https://${req.headers.host}`);
 
   try {
-    const session = await stripe.checkout.sessions.create({
+    const session = await stripe().checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
       customer_email: buyerEmail || undefined,
