@@ -9,6 +9,7 @@
 // Reuses the same env vars as /api/registrants:
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ORGANIZER_PASSCODE
 // ---------------------------------------------------------------------------
+import { requestedEvent } from "./event.js";
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASS = process.env.ORGANIZER_PASSCODE;
@@ -20,9 +21,10 @@ export default async function handler(req, res) {
   const base = `${SB}/rest/v1/lots`;
   try {
     if (req.method === "GET") {
-      const lr = await fetch(`${base}?event_year=eq.${YEAR}&order=created_at.asc`, { headers: H });
+      const ev = encodeURIComponent(requestedEvent(req));
+      const lr = await fetch(`${base}?event_id=eq.${ev}&order=created_at.asc`, { headers: H });
       const lots = await lr.json();
-      const sr = await fetch(`${SB}/rest/v1/event_settings?event_year=eq.${YEAR}&select=lot_fee`, { headers: H });
+      const sr = await fetch(`${SB}/rest/v1/event_settings?event_id=eq.${ev}&select=lot_fee`, { headers: H });
       const s = await sr.json();
       const lotFee = Array.isArray(s) && s[0] ? Number(s[0].lot_fee) : 50;
       return res.status(200).json({ lots, lotFee });
@@ -34,6 +36,7 @@ export default async function handler(req, res) {
         headers: { ...H, Prefer: "return=representation" },
         body: JSON.stringify({
           event_year: YEAR,
+          event_id: requestedEvent(req),
           lot_no: b.lotNo,
           description: b.description || null,
           auction_category: b.category || null,

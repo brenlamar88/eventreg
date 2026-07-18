@@ -12,7 +12,7 @@ import {
   saveManifest, manifestAll, manifestByToken, manifestPatch, manifestPut,
   queueOp, pendingCount, getMeta, fetchT, flushOutbox,
 } from "./offline.js";
-import { getEventConfig } from "./eventConfig.js";
+import { getEventConfig, withEvent, eventLink } from "./eventConfig.js";
 
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_DEMO = URL_PARAMS.get("demo") === "true";
@@ -557,7 +557,7 @@ function ScanStation() {
     if (!keyInput.trim()) return;
     setChecking(true); setKeyErr("");
     try {
-      const r = await fetchT("/api/registrants", { headers: { "x-organizer-key": keyInput } }, 8000);
+      const r = await fetchT(withEvent("/api/registrants"), { headers: { "x-organizer-key": keyInput } }, 8000);
       if (!r.ok) throw Object.assign(new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`), { http: true });
       sessionStorage.setItem("doorKey", keyInput);
       setKeyState(keyInput);
@@ -597,7 +597,7 @@ function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, e
   useEffect(() => {
     const refreshManifest = async () => {
       try {
-        const r = await fetchT("/api/registrants", { headers: { "x-organizer-key": passcode } }, 10000);
+        const r = await fetchT(withEvent("/api/registrants"), { headers: { "x-organizer-key": passcode } }, 10000);
         if (r.ok) saveManifest(await r.json());
       } catch { /* offline — the saved manifest carries the station */ }
     };
@@ -631,7 +631,7 @@ function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, e
         {exitOpen && (
           <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
             <input className="inp" type="password" placeholder="Passcode to exit" value={exitInput} onChange={(e) => setExitInput(e.target.value)} />
-            <button className="btn btn-p" onClick={() => { if (exitInput === passcode) { window.location.href = "/"; } else { setExitInput(""); } }}>Unlock</button>
+            <button className="btn btn-p" onClick={() => { if (exitInput === passcode) { window.location.href = eventLink("/"); } else { setExitInput(""); } }}>Unlock</button>
           </div>
         )}
         {cameraError ? (
@@ -699,7 +699,7 @@ function RegisterStation() {
     const poll = async () => {
       tries++;
       try {
-        const r = await fetch(`/api/ticket?session_id=${encodeURIComponent(sid)}`);
+        const r = await fetch(withEvent(`/api/ticket?session_id=${encodeURIComponent(sid)}`));
         if (r.ok) {
           const t = await r.json();
           setDone({ token: t.ticket_token, name: t.name, party: t.party, paid: true });
@@ -717,7 +717,7 @@ function RegisterStation() {
   const reset = () => {
     setForm({ firstName: "", lastName: "", phone: "", email: "", party: 1 });
     setDone(null); setErr("");
-    if (isStripeReturn) window.history.replaceState(null, "", "/?station=register");
+    if (isStripeReturn) window.history.replaceState(null, "", eventLink("/?station=register"));
   };
 
   const registerPayAtDoor = async () => {
@@ -774,7 +774,7 @@ function RegisterStation() {
 
   return (
     <StationShell icon={<Ticket size={15} />} title="Registration" subtitle={`Register here — ${money(TICKET.price).replace(".00", "")} per person.`}
-      onExit={() => { sessionStorage.removeItem("stationMode"); window.location.href = "/"; }} exitLabel="Staff exit">
+      onExit={() => { sessionStorage.removeItem("stationMode"); window.location.href = eventLink("/"); }} exitLabel="Staff exit">
       <div className="card" style={{ width: "min(520px,100%)", display: "grid", gap: 16 }}>
         <div className="frow">
           <div className="field"><label>First name <span className="req">*</span></label><input className="inp" value={form.firstName} onChange={(e) => setF("firstName", e.target.value)} placeholder="Jean" /></div>
@@ -935,7 +935,7 @@ export default function BoilOnTheBend() {
           const poll = async () => {
             tries++;
             try {
-              const r = await fetch(`/api/ticket?session_id=${encodeURIComponent(sid)}`);
+              const r = await fetch(withEvent(`/api/ticket?session_id=${encodeURIComponent(sid)}`));
               if (r.ok) {
                 const t = await r.json();
                 setTicket({ token: t.ticket_token, name: t.name, party: t.party });
@@ -954,8 +954,8 @@ export default function BoilOnTheBend() {
   // Probe the env-gated wallet endpoints once we reach the confirmation screen
   useEffect(() => {
     if (IS_DEMO || step !== 3) return;
-    fetch("/api/wallet-pass?probe=1").then((r) => setWalletAvail((w) => ({ ...w, apple: r.ok }))).catch(() => {});
-    fetch("/api/google-wallet?probe=1").then((r) => setWalletAvail((w) => ({ ...w, google: r.ok }))).catch(() => {});
+    fetch(withEvent("/api/wallet-pass?probe=1")).then((r) => setWalletAvail((w) => ({ ...w, apple: r.ok }))).catch(() => {});
+    fetch(withEvent("/api/google-wallet?probe=1")).then((r) => setWalletAvail((w) => ({ ...w, google: r.ok }))).catch(() => {});
   }, [step]);
 
   // Auto-refresh roster every 20 s when connected so all devices stay in sync
@@ -963,7 +963,7 @@ export default function BoilOnTheBend() {
     if (IS_DEMO || dbState !== "live") return;
     const id = setInterval(() => {
       if (!navigator.onLine) return; // offline: the manifest is the roster
-      fetch(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } })
+      fetch(withEvent(ROSTER_ENDPOINT), { headers: { "x-organizer-key": passcode } })
         .then((r) => r.ok ? r.json() : null)
         .then((rows) => { if (rows) { setRoster(rows.map(dbRowToUI)); saveManifest(rows); } })
         .catch(() => {});
@@ -1029,7 +1029,7 @@ export default function BoilOnTheBend() {
   const loadRoster = async (pc = passcode) => {
     setDbState("loading"); setDbMsg("");
     try {
-      const r = await fetchT(ROSTER_ENDPOINT, { headers: { "x-organizer-key": pc } }, 10000);
+      const r = await fetchT(withEvent(ROSTER_ENDPOINT), { headers: { "x-organizer-key": pc } }, 10000);
       if (!r.ok) throw Object.assign(new Error(r.status === 401 ? "Wrong passcode." : `Server returned ${r.status}.`), { http: true });
       const rows = await r.json();
       setRoster(rows.map(dbRowToUI));
@@ -1040,7 +1040,7 @@ export default function BoilOnTheBend() {
       refreshPending();
       setDbState("live"); setDbMsg(`Loaded ${rows.length} registrant${rows.length === 1 ? "" : "s"} from yellow-kite.`);
       // Load sponsors for association dropdown (best-effort)
-      try { const sr = await fetch("/api/sponsors", { headers: { "x-organizer-key": pc } }); if (sr.ok) { const sd = await sr.json(); setSponsors(Array.isArray(sd) ? sd : []); } } catch {}
+      try { const sr = await fetch(withEvent("/api/sponsors"), { headers: { "x-organizer-key": pc } }); if (sr.ok) { const sd = await sr.json(); setSponsors(Array.isArray(sd) ? sd : []); } } catch {}
     } catch (err) {
       // Network down (not a server verdict like 401): run the door from the
       // offline manifest — but only for the passcode that armed this device
@@ -1083,7 +1083,7 @@ export default function BoilOnTheBend() {
   const patchOrQueue = async (person, fields) => {
     if (IS_DEMO || !isServerRow(person) || !passcode) return;
     try {
-      const r = await fetchT(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id, ...fields }) });
+      const r = await fetchT(withEvent(ROSTER_ENDPOINT), { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id, ...fields }) });
       if (!r.ok) throw new Error(`PATCH ${r.status}`);
     } catch {
       await queueOp({ type: "patch", id: person.id, fields });
@@ -1112,7 +1112,7 @@ export default function BoilOnTheBend() {
     setRoster((r) => r.filter((p) => p.id !== person.id));
     if (isServerRow(person) && passcode) {
       try {
-        await fetch(ROSTER_ENDPOINT, { method: "DELETE", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id }) });
+        await fetch(withEvent(ROSTER_ENDPOINT), { method: "DELETE", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: person.id }) });
       } catch (err) { /* deletes are online-only; the poll restores the row if it failed */ }
     }
   };
@@ -1137,7 +1137,7 @@ export default function BoilOnTheBend() {
     // Always fetch fresh roster from DB to avoid duplicates across devices
     // (timeboxed: offline falls back to the local roster quickly)
     try {
-      const r = await fetchT(ROSTER_ENDPOINT, { headers: { "x-organizer-key": passcode } }, 6000);
+      const r = await fetchT(withEvent(ROSTER_ENDPOINT), { headers: { "x-organizer-key": passcode } }, 6000);
       if (r.ok) {
         const rows = await r.json();
         setRoster(rows.map(dbRowToUI)); // also refresh local state
@@ -1162,7 +1162,7 @@ export default function BoilOnTheBend() {
         <button className={view === "register" ? "on" : ""} onClick={() => setView("register")}><Ticket size={15} /> Register</button>
         <button className={view === "door" ? "on" : ""} onClick={() => setView("door")}><ScanLine size={15} /> Door</button>
         <button className={view === "admin" ? "on" : ""} onClick={() => setView("admin")}><LayoutGrid size={15} /> Organizer</button>
-        <button onClick={() => window.location.href = "/?app=settlement"} style={{ borderLeft: "1px solid #23604A", marginLeft: 4, paddingLeft: 12 }}><FileText size={15} /> Ledger</button>
+        <button onClick={() => window.location.href = eventLink("/?app=settlement")} style={{ borderLeft: "1px solid #23604A", marginLeft: 4, paddingLeft: 12 }}><FileText size={15} /> Ledger</button>
       </div>
     </div></div>
   );
@@ -1272,8 +1272,8 @@ export default function BoilOnTheBend() {
               {/* Station launchers — put each door iPad in a locked single-purpose mode */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 24, background: "var(--paper)", border: "1.5px solid var(--line)", borderRadius: 14, padding: "13px 16px" }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "var(--pine)" }}>iPad stations:</span>
-                <button className="btn btn-g" style={{ padding: "9px 16px", fontSize: 13.5 }} onClick={() => { window.location.href = "/?station=scan"; }}><ScanLine size={15} /> Launch Scan Station</button>
-                <button className="btn btn-g" style={{ padding: "9px 16px", fontSize: 13.5 }} onClick={() => { window.location.href = "/?station=register"; }}><UserPlus size={15} /> Launch Registration Station</button>
+                <button className="btn btn-g" style={{ padding: "9px 16px", fontSize: 13.5 }} onClick={() => { window.location.href = eventLink("/?station=scan"); }}><ScanLine size={15} /> Launch Scan Station</button>
+                <button className="btn btn-g" style={{ padding: "9px 16px", fontSize: 13.5 }} onClick={() => { window.location.href = eventLink("/?station=register"); }}><UserPlus size={15} /> Launch Registration Station</button>
                 <span style={{ fontSize: 12, color: "var(--inkSoft)" }}>Pin with iOS Guided Access. Exit needs the passcode.</span>
               </div>
 
@@ -1627,9 +1627,9 @@ export default function BoilOnTheBend() {
           </div>
           {token && (
             <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
-              {walletAvail.apple && <a className="btn btn-p" style={{ textDecoration: "none" }} href={`/api/wallet-pass?token=${encodeURIComponent(token)}`}>Add to Apple Wallet</a>}
-              {walletAvail.google && <a className="btn btn-p" style={{ textDecoration: "none" }} href={`/api/google-wallet?token=${encodeURIComponent(token)}`}>Add to Google Wallet</a>}
-              <a className="btn btn-g" style={{ textDecoration: "none" }} href={`/?ticket=${encodeURIComponent(token)}`}>Open my ticket page</a>
+              {walletAvail.apple && <a className="btn btn-p" style={{ textDecoration: "none" }} href={withEvent(`/api/wallet-pass?token=${encodeURIComponent(token)}`)}>Add to Apple Wallet</a>}
+              {walletAvail.google && <a className="btn btn-p" style={{ textDecoration: "none" }} href={withEvent(`/api/google-wallet?token=${encodeURIComponent(token)}`)}>Add to Google Wallet</a>}
+              <a className="btn btn-g" style={{ textDecoration: "none" }} href={eventLink(`/?ticket=${encodeURIComponent(token)}`)}>Open my ticket page</a>
             </div>
           )}
         </div></div>

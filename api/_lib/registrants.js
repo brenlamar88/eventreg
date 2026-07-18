@@ -15,11 +15,11 @@
 //   ORGANIZER_PASSCODE        = a passphrase you give door staff
 // ---------------------------------------------------------------------------
 
+import { requestedEvent } from "./event.js";
 const SB_URL = process.env.SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASSCODE = process.env.ORGANIZER_PASSCODE;
 const TABLE = "registrants";
-const EVENT_ID = "boil85";
 
 export default async function handler(req, res) {
   if (!req.headers["x-organizer-key"] || req.headers["x-organizer-key"] !== PASSCODE) {
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
       // Fetch registrants with sponsor name via PostgREST resource embedding
-      const r = await fetch(`${base}?event_id=eq.${EVENT_ID}&order=created_at.desc&select=*,sponsors(id,name)`, { headers });
+      const r = await fetch(`${base}?event_id=eq.${encodeURIComponent(requestedEvent(req))}&order=created_at.desc&select=*,sponsors(id,name)`, { headers });
       const data = await r.json();
       // Coalesce ranch from notes; flatten sponsor name
       const rows = Array.isArray(data) ? data.map((row) => ({

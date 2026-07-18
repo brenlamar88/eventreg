@@ -28,9 +28,9 @@ const FALLBACK_ICON =
 // White-label branding from event_settings (Event Setup screen); falls back
 // to the built-in defaults when unset or unreachable.
 const BRAND_DEFAULTS = { eventName: "Boil on the Bend", orgName: "Boil on the Bend", primary: "#183A2F", accent: "#C9A24D" };
-async function getBranding() {
+async function getBranding(eventId) {
   try {
-    const r = await fetch(`${SB_URL}/rest/v1/event_settings?event_year=eq.2026&select=event_name,org_name,color_primary,color_accent&limit=1`, {
+    const r = await fetch(`${SB_URL}/rest/v1/event_settings?event_id=eq.${encodeURIComponent(eventId || "boil85")}&select=event_name,org_name,color_primary,color_accent&limit=1`, {
       headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` },
     });
     if (!r.ok) return BRAND_DEFAULTS;
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
     const t = rows[0];
 
     const { PKPass } = await import("passkit-generator");
-    const brand = await getBranding();
+    const brand = await getBranding(t.event_id);
 
     const passJson = {
       formatVersion: 1,

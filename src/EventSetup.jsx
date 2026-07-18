@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from "react";
 import {
   Database, AlertTriangle, Check, Palette, Type, DollarSign, Image, Save,
-  RefreshCw, Eye, Info,
+  RefreshCw, Eye, Info, CalendarDays, Plus, Star, LayoutGrid,
 } from "lucide-react";
 import OrganizerNav from "./OrganizerNav.jsx";
-import { DEFAULTS, applyTheme } from "./eventConfig.js";
+import { DEFAULTS, applyTheme, withEvent, EVENT_PARAM, getEventConfig } from "./eventConfig.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
-const LS_KEY = "eventreg-config-v1";
+const LS_KEY = "eventreg-config-v1" + (EVENT_PARAM ? ":" + EVENT_PARAM : "");
+const SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/;
+
+const DEMO_EVENTS = [
+  { event_id: "boil85", event_name: "Boil on the Bend", event_year: 2026, is_default: true },
+  { event_id: "spring-gala", event_name: "Spring Gala", event_year: 2026, is_default: false },
+];
 
 const Styles = () => (
   <style>{`
@@ -93,6 +99,10 @@ export default function EventSetup() {
   const [logoMsg, setLogoMsg] = useState("");
   const [saveState, setSaveState] = useState("idle"); // idle | saving | saved | error
   const [saveErr, setSaveErr] = useState("");
+  const [events, setEvents] = useState([]);
+  const [newEv, setNewEv] = useState({ slug: "", name: "", year: "2026" });
+  const [evErr, setEvErr] = useState("");
+  const [evBusy, setEvBusy] = useState(false);
 
   const connected = db === "live";
   const canEdit = connected || IS_DEMO;
@@ -110,28 +120,73 @@ export default function EventSetup() {
       donationPresetsText: DEFAULTS.donationPresets.join(", "),
     });
     setColors({ ...DEFAULTS.colors });
+    setEvents(DEMO_EVENTS);
     setDb("live");
   }, []);
+
+  // The event this screen is editing: explicit ?event= wins, else the default
+  // event from the list, else the resolved boot config.
+  const currentId = EVENT_PARAM || events.find((e) => e.is_default)?.event_id || getEventConfig().eventId;
+  const curEv = events.find((e) => e.event_id === currentId);
+
+  const refreshEvents = async (key) => {
+    try {
+      const r = await fetch("/api/event-config?list=1", { headers: { "x-organizer-key": key ?? passcode } });
+      if (r.ok) { const j = await r.json(); setEvents(Array.isArray(j) ? j : []); }
+    } catch { /* list stays as-is */ }
+  };
 
   const connect = async () => {
     setDb("loading"); setMsg("");
     try {
       // Verify the passcode against an organizer-gated endpoint.
-      const auth = await fetch("/api/settings", { headers: hdr() });
+      const auth = await fetch(withEvent("/api/settings"), { headers: hdr() });
       if (!auth.ok) throw new Error(auth.status === 401 ? "Wrong passcode." : `Error ${auth.status}`);
       // Load the current (raw) settings row — public endpoint.
-      const r = await fetch("/api/event-config");
+      const r = await fetch(withEvent("/api/event-config"));
       if (!r.ok) throw new Error(`Error ${r.status}`);
       const row = await r.json();
       setForm(rowToForm(row));
       setColors(rowToColors(row));
       setLogoUrl(row.logo_url || null);
+      await refreshEvents();
       setDb("live");
       setMsg("Connected — current configuration loaded.");
     } catch (e) {
       setDb("offline");
       setMsg(`Could not connect (${e.message})`);
     }
+  };
+
+  const gotoEvent = (slug) => { window.location.href = `/?app=setup&event=${encodeURIComponent(slug)}`; };
+
+  const createEvent = async () => {
+    setEvErr("");
+    const slug = newEv.slug.trim().toLowerCase();
+    if (!SLUG_RE.test(slug)) { setEvErr("Slug must be lowercase letters, numbers, dashes, or underscores (max 41 chars, starting with a letter or number)."); return; }
+    if (IS_DEMO || !connected) return;
+    setEvBusy(true);
+    try {
+      const r = await fetch(`/api/event-config?event=${encodeURIComponent(slug)}`, {
+        method: "PUT", headers: hdr(),
+        body: JSON.stringify({ eventName: newEv.name.trim(), eventYear: Number(newEv.year) || 2026 }),
+      });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || `Error ${r.status}`); }
+      gotoEvent(slug);
+    } catch (e) {
+      setEvErr(e.message);
+      setEvBusy(false);
+    }
+  };
+
+  const makeDefault = async () => {
+    if (IS_DEMO || !connected) return;
+    try {
+      const r = await fetch(`/api/event-config?event=${encodeURIComponent(currentId)}`, {
+        method: "PUT", headers: hdr(), body: JSON.stringify({ isDefault: true }),
+      });
+      if (r.ok) await refreshEvents();
+    } catch { /* leave list untouched */ }
   };
 
   const save = async () => {
@@ -154,7 +209,7 @@ export default function EventSetup() {
       colorBackground: colors.background,
     };
     try {
-      const r = await fetch("/api/event-config", { method: "PUT", headers: hdr(), body: JSON.stringify(body) });
+      const r = await fetch(withEvent("/api/event-config"), { method: "PUT", headers: hdr(), body: JSON.stringify(body) });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
         throw new Error(j.error || `Error ${r.status}`);
@@ -176,7 +231,7 @@ export default function EventSetup() {
     reader.onload = async () => {
       const dataBase64 = String(reader.result).split(",")[1] || "";
       try {
-        const r = await fetch("/api/event-logo", { method: "POST", headers: hdr(), body: JSON.stringify({ filename: file.name, contentType: file.type, dataBase64 }) });
+        const r = await fetch(withEvent("/api/event-logo"), { method: "POST", headers: hdr(), body: JSON.stringify({ filename: file.name, contentType: file.type, dataBase64 }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) { setLogoMsg(j.error || `Upload failed (${r.status})`); return; }
         setLogoUrl(j.logoUrl);
@@ -222,6 +277,56 @@ export default function EventSetup() {
           </div>
         </div>}
         {!IS_DEMO && msg && <div className="hint" style={{ marginTop: -10, marginBottom: 16, color: db === "offline" ? "var(--warn)" : "var(--ok)" }}>{db === "offline" && <AlertTriangle size={14} />}{msg}</div>}
+
+        {/* ---- events (switch / create / default) ---- */}
+        {canEdit && (
+          <div className="addcard">
+            <div className="addhdr"><LayoutGrid size={17} /> Events</div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
+              <div className="f" style={{ minWidth: 240 }}>
+                <label>Editing event</label>
+                <select value={currentId} disabled={!canEdit}
+                  onChange={(e) => { if (e.target.value !== currentId) gotoEvent(e.target.value); }}>
+                  {events.map((ev) => (
+                    <option key={ev.event_id} value={ev.event_id}>
+                      {(ev.event_name || ev.event_id)} · {ev.event_year || "—"}{ev.is_default ? " (default)" : ""}
+                    </option>
+                  ))}
+                  {!events.some((e) => e.event_id === currentId) && <option value={currentId}>{currentId}</option>}
+                </select>
+              </div>
+              {!IS_DEMO && curEv && !curEv.is_default && (
+                <button className="btn ghost sm" onClick={makeDefault}><Check size={13} /> Make this the default event</button>
+              )}
+            </div>
+
+            <div style={{ borderTop: "1px solid var(--line)", margin: "16px 0 14px" }} />
+
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Create a new event</div>
+            <div className="fgrid">
+              <div className="f span4"><label>URL slug</label><input value={newEv.slug} disabled={!canEdit || evBusy} placeholder="dsc-austin-2026" onChange={(e) => setNewEv((p) => ({ ...p, slug: e.target.value.toLowerCase() }))} /></div>
+              <div className="f span5"><label>Event name</label><input value={newEv.name} disabled={!canEdit || evBusy} placeholder="DSC Austin Chapter Banquet" onChange={(e) => setNewEv((p) => ({ ...p, name: e.target.value }))} /></div>
+              <div className="f span2"><label>Year</label><input value={newEv.year} disabled={!canEdit || evBusy} inputMode="numeric" onChange={(e) => setNewEv((p) => ({ ...p, year: e.target.value.replace(/[^\d]/g, "").slice(0, 4) }))} /></div>
+              <div className="f span1" style={{ justifyContent: "flex-end" }}>
+                <button className="btn" style={{ marginTop: 18 }} disabled={IS_DEMO || !connected || evBusy || !newEv.slug.trim()} onClick={createEvent}>
+                  <Plus size={15} />{evBusy ? "…" : "Create"}
+                </button>
+              </div>
+            </div>
+            {evErr && <div className="hint" style={{ color: "var(--warn)", marginTop: 8 }}><AlertTriangle size={13} />{evErr}</div>}
+
+            <div style={{ background: "var(--bone2)", borderRadius: 10, padding: "12px 14px", marginTop: 14, fontSize: 12.5, color: "var(--inkSoft)", lineHeight: 1.6 }}>
+              Each event has its own branding, pricing, roster, sponsors, and auction. Share links with <code>?event=&lt;slug&gt;</code>; the default event needs no parameter.
+              {curEv && !curEv.is_default && (
+                <div style={{ marginTop: 8 }}>
+                  <div>Registration: <code>/?event={currentId}</code></div>
+                  <div>Scan station: <code>/?event={currentId}&amp;station=scan</code></div>
+                  <div>Registration station: <code>/?event={currentId}&amp;station=register</code></div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ---- event identity ---- */}
         <div className="addcard">

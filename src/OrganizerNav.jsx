@@ -1,5 +1,5 @@
 import React from "react";
-import { getEventConfig } from "./eventConfig.js";
+import { getEventConfig, eventLink } from "./eventConfig.js";
 
 const links = [
   { label: "Registration", href: "/", app: null },
@@ -21,7 +21,7 @@ export default function OrganizerNav() {
       {links.map(({ label, href, app }) => {
         const active = app === current;
         return (
-          <a key={href} href={href} style={{
+          <a key={href} href={eventLink(href)} style={{
             color: active ? "#fff" : "#9DB3A8",
             fontWeight: active ? 700 : 500,
             fontSize: 13,
