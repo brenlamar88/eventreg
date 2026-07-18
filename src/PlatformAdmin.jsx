@@ -89,7 +89,17 @@ export default function PlatformAdmin() {
       setOrgs(await r.json());
       if (!user) setAdminKey(key);
       setDb("live");
+      loadLeads();
     } catch (e) { setDb("offline"); setMsg(e.message); }
+  };
+
+  const [leads, setLeads] = useState([]);
+  const loadLeads = async () => {
+    try { const r = await fetch("/api/leads", { headers: await readHeaders() }); if (r.ok) setLeads(await r.json()); } catch {}
+  };
+  const setLeadStatus = async (id, status) => {
+    setLeads((p) => p.map((l) => (l.id === id ? { ...l, status } : l)));
+    try { await fetch(`/api/leads?id=${encodeURIComponent(id)}`, { method: "PUT", headers: await authedHeaders(), body: JSON.stringify({ status }) }); } catch {}
   };
 
   // Load any existing real-login session, and auto-connect once known.
@@ -327,8 +337,33 @@ export default function PlatformAdmin() {
               </div>
             ))}
 
+            {/* Demo requests from the marketing landing page */}
+            <div className="addcard" style={{ marginTop: 22 }}>
+              <div className="addhdr"><Building2 size={17} /> Demo requests {leads.length > 0 && <span className="chip ok" style={{ marginLeft: 6 }}>{leads.filter((l) => l.status === "new").length} new</span>}</div>
+              {leads.length === 0 ? (
+                <div className="hint">No demo requests yet. They'll appear here when someone books from the landing page (<code>/?app=home</code>).</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {leads.map((l) => (
+                    <div key={l.id} className="org" style={{ marginBottom: 0 }}>
+                      <div className="org-top">
+                        <div>
+                          <div className="org-name" style={{ fontSize: 16 }}>{l.name || l.email}{l.org_name ? ` · ${l.org_name}` : ""}</div>
+                          <div className="org-slug">{l.email}{l.phone ? ` · ${l.phone}` : ""}{l.event_type ? ` · ${l.event_type}` : ""}{l.preferred_time ? ` · prefers ${l.preferred_time}` : ""}</div>
+                          {l.message && <div style={{ fontSize: 13, color: "var(--inkSoft)", marginTop: 6 }}>{l.message}</div>}
+                        </div>
+                        <select className="pwd" style={{ width: 130 }} value={l.status} onChange={(e) => setLeadStatus(l.id, e.target.value)}>
+                          {["new", "contacted", "booked", "won", "lost"].map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="hint" style={{ marginTop: 18 }}>
-              Stripe payouts (Connect) and subscription billing per organization arrive in the next release. Assign events to an org from Event Setup.
+              Assign events to an org from Event Setup. Share your landing page at <code>/?app=home</code>.
             </div>
           </>
         )}

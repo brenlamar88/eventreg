@@ -198,6 +198,22 @@ only reach that chapter's data:
   against the master key or the requested event's own passcode.
 - Run `db/phase-f.sql` once (after `db/phase-e.sql`).
 
+### Marketing site + demo booking (Phase L)
+
+The product's own homepage lives at **`/?app=home`** — a marketing landing
+page (positioning, features, pricing teaser) with a **"Book a demo"** form.
+Submissions are stored as leads; you see and manage the pipeline (new →
+contacted → booked → won/lost) in **Platform Admin → Demo requests**.
+
+- The public form POSTs to `/api/leads` (no auth); reading the pipeline is
+  platform-admin only.
+- Change the product name in one line: `const BRAND = "…"` at the top of
+  `src/Marketing.jsx`.
+- Run `db/phase-l.sql` (after `db/phase-k.sql`) — adds the `leads` table
+  (anon may insert only).
+- When you register a product domain, point it at `/?app=home` (or split it
+  into its own deployment later).
+
 ### Capability-based access + RLS lockdown (Phase K, hardening)
 
 Access is now **least-privilege by capability**, not all-or-nothing. Three

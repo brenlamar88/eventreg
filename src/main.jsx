@@ -29,6 +29,8 @@ async function boot() {
     ? await import("./EventSetup.jsx")
     : app === "platform"
     ? await import("./PlatformAdmin.jsx")
+    : app === "home"
+    ? await import("./Marketing.jsx")
     : await import("./BoilOnTheBend.jsx");
   const App = mod.default;
 

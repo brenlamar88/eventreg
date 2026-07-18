@@ -24,6 +24,7 @@ import organizations from "./_lib/organizations.js";
 import connect from "./_lib/connect.js";
 import billing from "./_lib/billing.js";
 import members from "./_lib/members.js";
+import leads from "./_lib/leads.js";
 import registrants from "./_lib/registrants.js";
 import scan from "./_lib/scan.js";
 import scanBatch from "./_lib/scan-batch.js";
@@ -45,6 +46,7 @@ const ROUTES = {
   connect,
   billing,
   members,
+  leads,
   registrants,
   scan,
   "scan-batch": scanBatch,
