@@ -12,7 +12,7 @@ export default function TicketQR({ value, size = 116 }) {
       errorCorrectionLevel: "M",
       margin: 1,
       width: size * 3, // oversample for crisp rendering on retina screens
-      color: { dark: "#0C2A20", light: "#FFFFFF" },
+      color: { dark: "#000000", light: "#FFFFFF" },
     })
       .then((url) => { if (live) setSrc(url); })
       .catch(() => { if (live) setSrc(""); });

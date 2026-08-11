@@ -196,12 +196,12 @@ function mapJotformRow(row) {
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-    :root{--bone:#F4EFE6;--bone2:#EBE3D4;--paper:#FBF8F2;--ink:#1B1915;--inkSoft:#5C564C;
-      --pine:#123C2E;--pine2:#0C2A20;--pineLine:#23604A;--gold:#B9842B;--goldSoft:#E2C282;
-      --line:#DCD2C0;--ok:#2E7D5B;--warn:#A9601C;}
+    :root{--bone:#F9F9F9;--bone2:#F1F1F2;--paper:#FFFFFF;--ink:#111114;--inkSoft:#86868B;
+      --pine:#111114;--pine2:#000000;--pineLine:#E4E4E7;--gold:#F74D00;--goldSoft:#FDDBCC;
+      --line:#E7E7E8;--ok:#1E9E64;--warn:#B45309;}
     *{box-sizing:border-box}
-    .mrd{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
-    .mrd-serif{font-family:'Fraunces',Georgia,serif;}
+    .mrd{font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
+    .mrd-serif{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;}
     .grain{position:absolute;inset:0;opacity:.5;pointer-events:none;mix-blend-mode:overlay;
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");}
     .wrap{max-width:1080px;margin:0 auto;padding:0 22px;}
@@ -233,7 +233,7 @@ const Styles = () => (
     .stp.done .num{background:transparent;border-color:var(--gold);color:var(--gold);}
     .panel{padding:40px 0 90px;}
     .section-h{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:700;}
-    .section-t{font-family:'Fraunces',serif;font-size:30px;font-weight:600;letter-spacing:-.01em;margin:6px 0 4px;}
+    .section-t{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:30px;font-weight:600;letter-spacing:-.01em;margin:6px 0 4px;}
     .section-d{color:var(--inkSoft);margin:0 0 24px;font-size:15px;}
     .anim{animation:rise .42s cubic-bezier(.2,.7,.2,1) both;}
     @keyframes rise{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:none}}
@@ -242,22 +242,22 @@ const Styles = () => (
     .field label{font-size:12.5px;font-weight:600;color:#4a463d;}
     .field label .req{color:#b4471f;}
     .inp{font-family:inherit;font-size:14.5px;padding:12px 13px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);outline:none;transition:.15s;width:100%;}
-    .inp:focus{border-color:var(--pine);box-shadow:0 0 0 3px rgba(18,60,46,.1);}
+    .inp:focus{border-color:var(--pine);box-shadow:0 0 0 3px rgba(17,17,20,.1);}
     .inp.err{border-color:#cf6b45;background:#fdf4f0;}
     .errtxt{font-size:11.5px;color:#b4471f;}
     .frow{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
     @media(max-width:520px){.frow{grid-template-columns:1fr;}}
     .pkg{display:flex;align-items:center;gap:20px;background:var(--paper);border:1.5px solid var(--line);border-radius:18px;padding:24px;flex-wrap:wrap;}
     .pkg .ic{width:58px;height:58px;border-radius:14px;background:var(--pine);color:var(--goldSoft);display:grid;place-items:center;flex-shrink:0;}
-    .pkg .pname{font-family:'Fraunces',serif;font-size:21px;font-weight:600;}
-    .pkg .pprice{font-family:'Fraunces',serif;font-size:30px;font-weight:600;margin-left:auto;}
-    .pkg .pprice span{font-family:'Hanken Grotesk';font-size:13px;color:var(--inkSoft);font-weight:500;}
+    .pkg .pname{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:21px;font-weight:600;}
+    .pkg .pprice{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:30px;font-weight:600;margin-left:auto;}
+    .pkg .pprice span{font-family:'Figtree';font-size:13px;color:var(--inkSoft);font-weight:500;}
     .qtybar{display:flex;align-items:center;justify-content:space-between;margin-top:16px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px 20px;}
     .qty{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:11px;overflow:hidden;background:#fff;}
     .qty button{width:42px;height:42px;border:none;background:#fff;font-family:inherit;font-size:18px;cursor:pointer;color:var(--pine);}
     .qty button:hover{background:var(--bone2);}
     .qty button:disabled{opacity:.35;cursor:not-allowed;}
-    .qty span{width:46px;text-align:center;font-weight:700;font-size:16px;font-family:'Fraunces',serif;}
+    .qty span{width:46px;text-align:center;font-weight:700;font-size:16px;font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;}
     .dona{margin-top:16px;background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:20px;}
     .dona-h{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;}
     .dchips{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
@@ -270,7 +270,7 @@ const Styles = () => (
     .linkbtn{background:none;border:none;font-family:inherit;color:#a23b1c;font-weight:600;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;}
     .sum{position:sticky;top:18px;background:var(--pine);color:#EAF1EC;border-radius:20px;overflow:hidden;}
     .sum-h{padding:20px 22px 16px;border-bottom:1px solid var(--pineLine);}
-    .sum-h .evt{font-family:'Fraunces',serif;font-size:19px;font-weight:600;color:#fff;}
+    .sum-h .evt{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:19px;font-weight:600;color:#fff;}
     .sum-h .dt{font-size:12.5px;color:#A9C0B5;margin-top:3px;}
     .sum-b{padding:18px 22px;}
     .li{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:7px 0;color:#D4E0D9;}
@@ -279,7 +279,7 @@ const Styles = () => (
     .sum-div{height:1px;background:var(--pineLine);margin:8px 0;}
     .total{display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;}
     .total .lbl{font-size:13px;color:#A9C0B5;text-transform:uppercase;letter-spacing:.1em;}
-    .total .val{font-family:'Fraunces',serif;font-size:32px;font-weight:600;color:#fff;}
+    .total .val{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:32px;font-weight:600;color:#fff;}
     .nav{display:flex;justify-content:space-between;gap:14px;margin-top:28px;}
     .btn{font-family:inherit;font-weight:700;font-size:15px;border-radius:12px;cursor:pointer;padding:14px 26px;display:inline-flex;align-items:center;gap:9px;transition:.18s;border:1.5px solid transparent;}
     .btn-p{background:var(--pine);color:#fff;}
@@ -293,7 +293,7 @@ const Styles = () => (
     .conf{text-align:center;padding:56px 0 90px;max-width:560px;margin:0 auto;}
     .conf .badge{width:76px;height:76px;border-radius:50%;background:var(--ok);display:grid;place-items:center;margin:0 auto 22px;color:#fff;animation:pop .5s cubic-bezier(.2,1.3,.4,1) both;}
     @keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
-    .conf h2{font-family:'Fraunces',serif;font-size:34px;font-weight:600;margin:0;}
+    .conf h2{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:34px;font-weight:600;margin:0;}
     .conf p{color:var(--inkSoft);font-size:15.5px;margin:10px 0 0;}
     .ticket{margin:32px auto 0;background:var(--paper);border:1.5px solid var(--line);border-radius:18px;display:flex;overflow:hidden;text-align:left;}
     @media(max-width:560px){.ticket{flex-direction:column;}}
@@ -303,11 +303,11 @@ const Styles = () => (
     .ticket .body .row:last-child{border:none;}
     .ticket .body .k{color:var(--inkSoft);}
     .ticket .body .v{font-weight:700;}
-    .conf-code{font-family:'Fraunces',serif;letter-spacing:.06em;font-size:15px;color:var(--goldSoft);}
+    .conf-code{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;letter-spacing:.06em;font-size:15px;color:var(--goldSoft);}
     .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
     @media(max-width:680px){.stats{grid-template-columns:repeat(2,1fr);}}
     .stat{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px 18px;}
-    .stat .n{font-family:'Fraunces',serif;font-size:28px;font-weight:600;}
+    .stat .n{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:28px;font-weight:600;}
     .stat .l{font-size:12px;color:var(--inkSoft);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-top:2px;}
     .dbbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:13px 16px;margin-bottom:18px;}
     .dbbar .pwd{flex:1;min-width:160px;}
@@ -479,7 +479,7 @@ function ScanModal({ passcode, onClose, onCheckedIn }) {
   const { videoRef, status, cameraError, redeem } = useTicketScanner(passcode, "door", onCheckedIn);
   const [manual, setManual] = useState("");
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(12,42,32,.66)", zIndex: 60, display: "grid", placeItems: "center", padding: 18 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(17,17,20,.66)", zIndex: 60, display: "grid", placeItems: "center", padding: 18 }} onClick={onClose}>
       <div style={{ background: "var(--paper)", borderRadius: 18, border: "1.5px solid var(--line)", width: "min(440px,100%)", overflow: "hidden" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", background: "var(--pine)", color: "#EAF1EC" }}>
           <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}><ScanLine size={17} /> Scan tickets</span>
@@ -491,7 +491,7 @@ function ScanModal({ passcode, onClose, onCheckedIn }) {
               <AlertTriangle size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />{cameraError}
             </div>
           ) : (
-            <video ref={videoRef} style={{ width: "100%", borderRadius: 12, background: "#0C2A20", aspectRatio: "4/3", objectFit: "cover" }} muted playsInline />
+            <video ref={videoRef} style={{ width: "100%", borderRadius: 12, background: "#000000", aspectRatio: "4/3", objectFit: "cover" }} muted playsInline />
           )}
           <ScanBanner status={status} />
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -635,11 +635,11 @@ function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, e
           </div>
         )}
         {cameraError ? (
-          <div style={{ fontSize: 14.5, color: "#E2C282", background: "#1a4d3a", border: "1.5px solid #3c6d59", borderRadius: 14, padding: "16px 18px" }}>
+          <div style={{ fontSize: 14.5, color: "#FDDBCC", background: "#1a4d3a", border: "1.5px solid #3c6d59", borderRadius: 14, padding: "16px 18px" }}>
             <AlertTriangle size={15} style={{ display: "inline", verticalAlign: "middle", marginRight: 7 }} />{cameraError}
           </div>
         ) : (
-          <video ref={videoRef} style={{ width: "100%", borderRadius: 16, background: "#0C2A20", aspectRatio: "4/3", objectFit: "cover", border: "1.5px solid var(--pineLine)" }} muted playsInline />
+          <video ref={videoRef} style={{ width: "100%", borderRadius: 16, background: "#000000", aspectRatio: "4/3", objectFit: "cover", border: "1.5px solid var(--pineLine)" }} muted playsInline />
         )}
         <ScanBanner status={status} big />
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
@@ -1447,7 +1447,7 @@ export default function BoilOnTheBend() {
 
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14, paddingTop: 4 }}>
                     <div>
-                      <span style={{ fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600 }}>{money(walkInTotal)}</span>
+                      <span style={{ fontFamily: "'Figtree',ui-sans-serif,system-ui,sans-serif", fontSize: 26, fontWeight: 600 }}>{money(walkInTotal)}</span>
                       <span style={{ color: "var(--inkSoft)", fontSize: 13, marginLeft: 8 }}>{walkInForm.party || 1} × {money(TICKET.price)}</span>
                     </div>
                     {walkInForm.payment === "cash" ? (
@@ -1510,7 +1510,7 @@ export default function BoilOnTheBend() {
           <p className="section-d">Enter the organizer passcode to load the roster.</p>
 
           {IS_DEMO && (
-            <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
+            <div style={{background:"#F74D00",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
               <AlertTriangle size={16}/> DEMO MODE — Sample data only. No real data is shown or saved.
             </div>
           )}

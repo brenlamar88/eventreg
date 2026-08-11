@@ -27,10 +27,10 @@ export const DEFAULTS = {
   donationPresets: [25, 50, 100],
   logoUrl: null,
   colors: {
-    primary: "#123C2E",      // pine
-    primaryDark: "#0C2A20",  // pine2
-    accent: "#B9842B",       // gold
-    background: "#F4EFE6",   // bone
+    primary: "#111114",      // pine  → ink black (primary UI: buttons, nav, headers)
+    primaryDark: "#000000",  // pine2
+    accent: "#F74D00",       // gold  → orange accent
+    background: "#F9F9F9",   // bone  → cool neutral surface
   },
 };
 
@@ -125,8 +125,8 @@ export function applyTheme(cfg = current) {
     root.setProperty("--gold", c.accent);
     root.setProperty("--goldSoft", mix(c.accent, "#ffffff", 0.45));
     root.setProperty("--bone", c.background);
-    root.setProperty("--bone2", mix(c.background, "#000000", 0.06));
-    root.setProperty("--paper", mix(c.background, "#ffffff", 0.55));
+    root.setProperty("--bone2", mix(c.background, "#000000", 0.05));
+    root.setProperty("--paper", mix(c.background, "#ffffff", 0.78));
   } catch { /* non-browser context */ }
 }
 

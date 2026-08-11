@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
-  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download,
+  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download, Gavel,
 } from "lucide-react";
 import AdminShell from "./AdminShell.jsx";
 import { DEMO_LOTS, DEMO_PEOPLE, DEMO_REGISTRANTS, DEMO_SPONSORS, DEMO_LOT_FEE } from "./demoData.js";
@@ -43,6 +43,16 @@ function downloadCsv(filename, rows) {
 }
 
 /* ---- data layer (yellow-kite via same-origin API; falls back to local) ---- */
+// <input type="datetime-local"> uses local wall-clock with no zone; convert
+// to/from the ISO timestamps the API stores.
+const isoToLocal = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso); if (isNaN(d)) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const localToIso = (local) => { if (!local) return null; const d = new Date(local); return isNaN(d) ? null : d.toISOString(); };
+
 const dbLotToUI = (r) => ({
   id: r.id, lotNo: r.lot_no, description: r.description || "",
   category: r.auction_category || (r.donated ? "Donated" : ""),
@@ -54,22 +64,28 @@ const dbLotToUI = (r) => ({
   amount: Number(r.amount) || 0, amountPaid: Number(r.amount_paid) || 0, donated: !!r.donated,
   delivered: !!r.delivered, checkNo: r.check_no || "", checkDate: r.check_date || "",
   buyerPaid: !!r.buyer_paid, paymentMethod: r.payment_method || "cash",
+  // Silent-auction live bidding (phase-m)
+  biddingOpen: !!r.bidding_open, startingBid: r.starting_bid == null ? "" : Number(r.starting_bid),
+  minIncrement: r.min_increment == null ? "" : Number(r.min_increment),
+  bidCloseAt: r.bid_close_at || "", imageUrl: r.image_url || "",
+  currentBid: r.current_bid == null ? null : Number(r.current_bid),
+  highBidderNo: r.high_bidder_no || "", bidCount: Number(r.bid_count) || 0,
 });
 
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-    :root{--bone:#F4EFE6;--bone2:#EBE3D4;--paper:#FBF8F2;--ink:#1B1915;--inkSoft:#5C564C;
-      --pine:#123C2E;--pine2:#0C2A20;--pineLine:#23604A;--gold:#B9842B;--goldSoft:#E2C282;
-      --line:#DCD2C0;--ok:#2E7D5B;--warn:#A9601C;}
+    :root{--bone:#F9F9F9;--bone2:#F1F1F2;--paper:#FFFFFF;--ink:#111114;--inkSoft:#86868B;
+      --pine:#111114;--pine2:#000000;--pineLine:#E4E4E7;--gold:#F74D00;--goldSoft:#FDDBCC;
+      --line:#E7E7E8;--ok:#1E9E64;--warn:#B45309;}
     *{box-sizing:border-box}
-    .ewa{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
-    .serif{font-family:'Fraunces',Georgia,serif;}
+    .ewa{font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
+    .serif{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;}
     .wrap{max-width:1180px;margin:0 auto;padding:0 22px;}
     .head{background:linear-gradient(160deg,var(--pine),var(--pine2));color:#EAF1EC;}
     .head-in{padding:30px 0 0;}
     .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
-    .head h1{font-family:'Fraunces',serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
+    .head h1{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
     .head .sub{color:#A9C0B5;font-size:14px;margin-top:4px;}
     .tabs{display:flex;gap:4px;margin-top:22px;flex-wrap:wrap;}
     .tab{font-family:inherit;border:none;background:transparent;color:#9DB3A8;font-weight:600;font-size:14px;padding:11px 18px;border-radius:11px 11px 0 0;cursor:pointer;display:flex;align-items:center;gap:8px;}
@@ -77,7 +93,7 @@ const Styles = () => (
     .panel{padding:24px 0 90px;}
     .settings{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
     .settings label{font-size:12.5px;font-weight:700;color:#4a463d;display:flex;align-items:center;gap:7px;}
-    .feein{font-family:'Fraunces',serif;font-size:18px;font-weight:600;width:110px;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--pine);outline:none;}
+    .feein{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:18px;font-weight:600;width:110px;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--pine);outline:none;}
     .feein:focus{border-color:var(--pine);}
     .tiers{font-size:12px;color:var(--inkSoft);}
     .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:6px;}
@@ -90,11 +106,11 @@ const Styles = () => (
     @media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr);}}
     .kpi{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;}
     .kpi .l{font-size:11px;color:var(--inkSoft);text-transform:uppercase;letter-spacing:.07em;font-weight:600;display:flex;align-items:center;gap:6px;}
-    .kpi .n{font-family:'Fraunces',serif;font-size:24px;font-weight:600;margin-top:6px;}
+    .kpi .n{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:24px;font-weight:600;margin-top:6px;}
     .kpi.accent{background:var(--pine);color:#fff;border-color:var(--pine);}
     .kpi.accent .l{color:var(--goldSoft);} .kpi.accent .n{color:#fff;}
     .addcard{background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:20px;margin-bottom:22px;}
-    .addhdr{font-family:'Fraunces',serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+    .addhdr{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
     .fgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;}
     .f{display:flex;flex-direction:column;gap:5px;}
     .f label{font-size:11.5px;font-weight:600;color:#4a463d;}
@@ -108,8 +124,8 @@ const Styles = () => (
     .tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--inkSoft);font-weight:700;padding:11px 12px;background:var(--bone2);border-bottom:1.5px solid var(--line);}
     .tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
     .tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
-    .tbl .lot{font-weight:700;font-family:'Fraunces',serif;}
-    .grp2{background:#eef1ea;} .grp2 td{font-family:'Fraunces',serif;font-weight:600;font-size:14px;color:var(--pine);padding:12px;}
+    .tbl .lot{font-weight:700;font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;}
+    .grp2{background:#eef1ea;} .grp2 td{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-weight:600;font-size:14px;color:var(--pine);padding:12px;}
     .sub td{background:#f6f3ec;font-weight:700;} .sub td.num{color:var(--pine);}
     .net{font-weight:700;color:var(--pine);}
     .donated{color:var(--inkSoft);font-style:italic;}
@@ -135,21 +151,33 @@ const Styles = () => (
     .edit-row td{background:#f0f4f0;padding:14px 12px;border-bottom:2px solid var(--pine);}
     .edit-grid{display:grid;grid-template-columns:80px 1fr 160px 160px 100px 160px 100px 100px auto;gap:10px;align-items:end;}
     @media(max-width:1100px){.edit-grid{grid-template-columns:repeat(3,1fr);}}
+    .bid-panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:4px 0;}
+    .bid-panel-h{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink);}
+    .bid-panel-h svg{color:var(--gold);}
+    .bid-panel-sub{font-weight:400;color:var(--inkSoft);font-size:12px;}
+    .bid-grid{display:grid;grid-template-columns:auto repeat(3,140px) 1fr;gap:10px;align-items:end;margin-top:10px;}
+    @media(max-width:900px){.bid-grid{grid-template-columns:repeat(2,1fr);}}
+    .bid-toggle{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;padding-bottom:8px;}
+    .bmini{font-family:inherit;font-size:13px;padding:7px 9px;border:1.5px solid var(--line);border-radius:8px;width:100%;background:var(--bone);}
+    .bmini:focus{border-color:var(--gold);outline:none;}
+    .bid-status{margin-top:10px;font-size:13px;color:var(--ink);display:flex;align-items:center;flex-wrap:wrap;}
+    .bid-status.muted{color:var(--inkSoft);}
+    .bid-status b{color:var(--gold);}
     .grand{margin-top:18px;background:var(--pine);color:#EAF1EC;border-radius:14px;padding:18px 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
     @media(max-width:760px){.grand{grid-template-columns:repeat(2,1fr);}}
     .grand .l{font-size:11px;color:var(--goldSoft);text-transform:uppercase;letter-spacing:.08em;font-weight:600;}
-    .grand .n{font-family:'Fraunces',serif;font-size:23px;font-weight:600;color:#fff;margin-top:4px;}
+    .grand .n{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:23px;font-weight:600;color:#fff;margin-top:4px;}
     .empty{background:var(--paper);border:1.5px dashed var(--line);border-radius:14px;padding:46px 20px;text-align:center;color:var(--inkSoft);}
-    .empty .big{font-family:'Fraunces',serif;font-size:18px;color:var(--ink);margin-bottom:4px;}
+    .empty .big{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:18px;color:var(--ink);margin-bottom:4px;}
     .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
     .sel{font-family:inherit;font-size:14px;padding:10px 13px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);outline:none;min-width:280px;}
     .ledger{background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:26px;}
     .ledger .lh{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;border-bottom:2px solid var(--pine);padding-bottom:14px;}
-    .ledger .who{font-family:'Fraunces',serif;font-size:22px;font-weight:600;}
+    .ledger .who{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:22px;font-weight:600;}
     .ledger .whosub{font-size:13px;color:var(--inkSoft);margin-top:2px;}
-    .secLabel{font-family:'Fraunces',serif;font-weight:600;font-size:13px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 6px;}
+    .secLabel{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-weight:600;font-size:13px;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 6px;}
     .totline{display:flex;justify-content:space-between;padding:7px 2px;font-size:14px;border-top:1px solid var(--line);}
-    .totline.big{font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--pine);border-top:2px solid var(--pine);margin-top:4px;padding-top:12px;}
+    .totline.big{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:18px;font-weight:600;color:var(--pine);border-top:2px solid var(--pine);margin-top:4px;padding-top:12px;}
     @media print {
       @page { margin: 0; }
       body { margin: 15mm; }
@@ -178,7 +206,7 @@ export default function AuctionSettlement() {
   const [grandFormErr, setGrandFormErr] = useState("");
   const [saleFilter, setSaleFilter] = useState("All");
   const setEF = (k, v) => setEditForm((p) => ({ ...p, [k]: v }));
-  const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, saleType: l.saleType || "Live", consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated }); };
+  const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, saleType: l.saleType || "Live", consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated, biddingOpen: l.biddingOpen, startingBid: l.startingBid, minIncrement: l.minIncrement === "" ? 10 : l.minIncrement, bidCloseAt: isoToLocal(l.bidCloseAt), imageUrl: l.imageUrl }); };
   const cancelEdit = () => { setEditId(null); setEditForm({}); };
 
   const connected = db === "live";
@@ -247,6 +275,7 @@ export default function AuctionSettlement() {
   const rememberPerson = (name, ranch) => { if (name) setPeople((prev) => prev.some((p) => p.name.toLowerCase() === name.toLowerCase()) ? prev : [...prev, { name, ranch: ranch || "" }]); };
 
   const saveLotEdit = async () => {
+    const isSilent = (editForm.saleType || "Live") === "Silent";
     const patch = {
       lotNo: editForm.lotNo.trim(), description: editForm.description.trim(),
       category: editForm.donated ? "Donated" : editForm.category,
@@ -254,14 +283,35 @@ export default function AuctionSettlement() {
       consignorName: editForm.consignorName.trim(), consignorRanch: editForm.consignorRanch.trim(),
       donated: editForm.donated,
       consignor: display(editForm.consignorName.trim(), editForm.consignorRanch.trim()),
+      // Live-bidding config (Silent items only)
+      biddingOpen: isSilent ? !!editForm.biddingOpen : false,
+      startingBid: editForm.startingBid === "" ? 0 : Number(editForm.startingBid),
+      minIncrement: editForm.minIncrement === "" ? 10 : Number(editForm.minIncrement),
+      bidCloseAt: isoToLocal(editForm.bidCloseAt) ? editForm.bidCloseAt : editForm.bidCloseAt, // keep local value for UI
+      imageUrl: (editForm.imageUrl || "").trim(),
     };
     setLots((p) => p.map((l) => l.id === editId ? { ...l, ...patch } : l));
     if (!IS_DEMO && connected && typeof editId === "string" && !editId.startsWith("tmp-")) {
       try {
-        await fetch(withEvent("/api/lots"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, sale_type: patch.saleType, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
+        await fetch(withEvent("/api/lots"), { method: "PATCH", headers: hdr(), body: JSON.stringify({
+          id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category,
+          sale_type: patch.saleType, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated,
+          bidding_open: patch.biddingOpen, starting_bid: patch.startingBid, min_increment: patch.minIncrement,
+          bid_close_at: localToIso(editForm.bidCloseAt), image_url: patch.imageUrl || null,
+        }) });
       } catch {}
     }
     cancelEdit();
+  };
+
+  // Close a silent-auction item and settle the winner into the ledger.
+  const finalizeLot = async (id) => {
+    if (IS_DEMO || !connected) return;
+    try {
+      await fetch(withEvent("/api/bids"), { method: "POST", headers: hdr(), body: JSON.stringify({ action: "finalize", lotId: id }) });
+      const lr = await fetch(withEvent("/api/lots"), { headers: hdr() });
+      if (lr.ok) { const { lots: dbLots } = await lr.json(); setLots(dbLots.map(dbLotToUI)); }
+    } catch {}
   };
 
   /* ---- connect: load lots + fee + registered people ---- */
@@ -425,7 +475,7 @@ export default function AuctionSettlement() {
 
       <div className="wrap panel">
         {IS_DEMO && (
-          <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
+          <div style={{background:"#F74D00",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
             <AlertTriangle size={16}/> DEMO MODE — Sample data only. No real data is shown or saved. All features are fully functional.
           </div>
         )}
@@ -513,6 +563,23 @@ export default function AuctionSettlement() {
                               <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
                               <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
                               <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => setEF("donated", e.target.checked)} /> 100% donation to {CFG.orgShort}</label></div>
+                              {editForm.saleType === "Silent" && (
+                                <div className="bid-panel" style={{gridColumn:"1 / -1"}}>
+                                  <div className="bid-panel-h"><Gavel size={14}/> Mobile bidding <span className="bid-panel-sub">— attendees bid from their phones at /?app=auction</span></div>
+                                  <div className="bid-grid">
+                                    <label className="bid-toggle"><input type="checkbox" checked={!!editForm.biddingOpen} onChange={(e)=>setEF("biddingOpen", e.target.checked)} /> Bidding open</label>
+                                    <div className="f"><label>Starting bid ($)</label><input type="number" min="0" className="bmini" value={editForm.startingBid} onChange={(e)=>setEF("startingBid", e.target.value)} /></div>
+                                    <div className="f"><label>Min increment ($)</label><input type="number" min="1" className="bmini" value={editForm.minIncrement} onChange={(e)=>setEF("minIncrement", e.target.value)} /></div>
+                                    <div className="f"><label>Closes at</label><input type="datetime-local" className="bmini" value={isoToLocal(editForm.bidCloseAt)} onChange={(e)=>setEF("bidCloseAt", localToIso(e.target.value))} /></div>
+                                    <div className="f" style={{gridColumn:"span 2"}}><label>Photo URL (optional)</label><input className="bmini" placeholder="https://…" value={editForm.imageUrl||""} onChange={(e)=>setEF("imageUrl", e.target.value)} /></div>
+                                  </div>
+                                  {(() => { const cur = lots.find((x)=>x.id===editId) || {}; return cur.bidCount > 0 ? (
+                                    <div className="bid-status">Live: <b>{money(cur.currentBid||0)}</b> · leader <b>#{cur.highBidderNo||"—"}</b> · {cur.bidCount} bid{cur.bidCount===1?"":"s"}
+                                      <button className="btn ghost" style={{fontSize:12,padding:"5px 10px",marginLeft:10}} onClick={()=>finalizeLot(editId)}><Check size={12}/> Close &amp; settle winner</button>
+                                    </div>
+                                  ) : <div className="bid-status muted">No bids yet. Toggle “Bidding open”, set a close time, then Save.</div>; })()}
+                                </div>
+                              )}
                               <div className="f" style={{flexDirection:"row",gap:8,alignItems:"flex-end"}}>
                                 <button className="btn" style={{fontSize:13,padding:"7px 14px"}} onClick={saveLotEdit}><Check size={14}/> Save</button>
                                 <button className="btn ghost" style={{fontSize:13,padding:"7px 12px"}} onClick={cancelEdit}><X size={14}/> Cancel</button>
@@ -778,7 +845,7 @@ export default function AuctionSettlement() {
 
           const Card = ({title, desc, onClick, loading, csv=true}) => (
             <div style={{background:"var(--paper)",border:"1.5px solid var(--line)",borderRadius:14,padding:"22px 24px",display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{fontFamily:"'Fraunces',serif",fontSize:17,fontWeight:600}}>{title}</div>
+              <div style={{fontFamily:"'Figtree',ui-sans-serif,system-ui,sans-serif",fontSize:17,fontWeight:600}}>{title}</div>
               <div style={{fontSize:13,color:"var(--inkSoft)",flex:1}}>{desc}</div>
               <button className="btn" onClick={onClick} disabled={loading} style={{alignSelf:"flex-start"}}>
                 <Download size={15}/> {loading?"Preparing…":csv?"Download CSV":"Download Excel"}
@@ -788,7 +855,7 @@ export default function AuctionSettlement() {
 
           return (<>
             <div style={{marginBottom:16}}>
-              <div className="addhdr" style={{fontFamily:"'Fraunces',serif",fontSize:20,fontWeight:600,marginBottom:6}}><Download size={18}/> Export Reports</div>
+              <div className="addhdr" style={{fontFamily:"'Figtree',ui-sans-serif,system-ui,sans-serif",fontSize:20,fontWeight:600,marginBottom:6}}><Download size={18}/> Export Reports</div>
               <div style={{fontSize:13,color:"var(--inkSoft)"}}>All files open directly in Excel. Connect with your organizer passcode first to export live data.</div>
             </div>
             <div style={{marginBottom:20}}>

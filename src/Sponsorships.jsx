@@ -12,7 +12,7 @@ const CFG = getEventConfig();
 
 const TIERS = [
   { name: "Presenting",  amount: 15000, color: "#7B61FF" },
-  { name: "Platinum",    amount: 10000, color: "#B9842B" },
+  { name: "Platinum",    amount: 10000, color: "#F74D00" },
   { name: "Gold",        amount:  5000, color: "#C8A84B" },
   { name: "Silver",      amount:  2500, color: "#7A8FA6" },
   { name: "Bronze",      amount:  1000, color: "#A0673A" },
@@ -85,17 +85,17 @@ const pkgDbToUI = (r) => ({
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-    :root{--bone:#F4EFE6;--bone2:#EBE3D4;--paper:#FBF8F2;--ink:#1B1915;--inkSoft:#5C564C;
-      --pine:#123C2E;--pine2:#0C2A20;--pineLine:#23604A;--gold:#B9842B;--goldSoft:#E2C282;
-      --line:#DCD2C0;--ok:#2E7D5B;--warn:#A9601C;}
+    :root{--bone:#F9F9F9;--bone2:#F1F1F2;--paper:#FFFFFF;--ink:#111114;--inkSoft:#86868B;
+      --pine:#111114;--pine2:#000000;--pineLine:#E4E4E7;--gold:#F74D00;--goldSoft:#FDDBCC;
+      --line:#E7E7E8;--ok:#1E9E64;--warn:#B45309;}
     *{box-sizing:border-box}
-    .spo{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
-    .serif{font-family:'Fraunces',Georgia,serif;}
+    .spo{font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
+    .serif{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;}
     .wrap{max-width:1200px;margin:0 auto;padding:0 22px;}
     .head{background:linear-gradient(160deg,var(--pine),var(--pine2));color:#EAF1EC;}
     .head-in{padding:30px 0 0;}
     .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
-    .head h1{font-family:'Fraunces',serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
+    .head h1{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
     .head .sub{color:#A9C0B5;font-size:14px;margin-top:4px;padding-bottom:28px;}
     .panel{padding:24px 0 90px;}
     .settings{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
@@ -112,11 +112,11 @@ const Styles = () => (
     @media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr);}}
     .kpi{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;}
     .kpi .l{font-size:11px;color:var(--inkSoft);text-transform:uppercase;letter-spacing:.07em;font-weight:600;display:flex;align-items:center;gap:6px;}
-    .kpi .n{font-family:'Fraunces',serif;font-size:24px;font-weight:600;margin-top:6px;}
+    .kpi .n{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:24px;font-weight:600;margin-top:6px;}
     .kpi.accent{background:var(--pine);color:#fff;border-color:var(--pine);}
     .kpi.accent .l{color:var(--goldSoft);} .kpi.accent .n{color:#fff;}
     .addcard{background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:20px;margin-bottom:22px;}
-    .addhdr{font-family:'Fraunces',serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+    .addhdr{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
     .fgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;}
     .f{display:flex;flex-direction:column;gap:5px;}
     .f label{font-size:11.5px;font-weight:600;color:#4a463d;}
@@ -152,14 +152,14 @@ const Styles = () => (
     .exp-field textarea{resize:vertical;min-height:58px;}
     .chkrow{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#4a463d;margin-top:20px;}
     .tier-section{margin-bottom:28px;}
-    .tier-hdr{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--pine);padding:10px 0 6px;border-bottom:2px solid var(--line);margin-bottom:8px;display:flex;align-items:center;gap:10px;}
+    .tier-hdr{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:15px;font-weight:600;color:var(--pine);padding:10px 0 6px;border-bottom:2px solid var(--line);margin-bottom:8px;display:flex;align-items:center;gap:10px;}
     .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;justify-content:space-between;}
     .empty{background:var(--paper);border:1.5px dashed var(--line);border-radius:14px;padding:46px 20px;text-align:center;color:var(--inkSoft);}
-    .empty .big{font-family:'Fraunces',serif;font-size:18px;color:var(--ink);margin-bottom:4px;}
+    .empty .big{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:18px;color:var(--ink);margin-bottom:4px;}
     .pkgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:13px;margin-bottom:16px;}
     .pkg{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:15px 16px;display:flex;flex-direction:column;gap:5px;}
-    .pkg .nm{font-family:'Fraunces',serif;font-size:16px;font-weight:600;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
-    .pkg .pr{font-family:'Fraunces',serif;font-size:20px;font-weight:600;color:var(--pine);}
+    .pkg .nm{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:16px;font-weight:600;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+    .pkg .pr{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:20px;font-weight:600;color:var(--pine);}
     .pkg .desc{font-size:12.5px;color:var(--inkSoft);}
     .pkg ul{margin:4px 0 0;padding-left:18px;font-size:12.5px;color:var(--inkSoft);}
     .pkg ul li{margin-bottom:2px;}
@@ -419,7 +419,7 @@ export default function Sponsorships() {
 
       <div className="wrap panel">
         {IS_DEMO && (
-          <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
+          <div style={{background:"#F74D00",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
             <AlertTriangle size={16}/> DEMO MODE — Sample data only. No real data is shown or saved. All features are fully functional.
           </div>
         )}
@@ -565,7 +565,7 @@ export default function Sponsorships() {
           {byTier.map(({ tier, isPackage, items }) => (
             <div key={tier} className="tier-section">
               <div className="tier-hdr">
-                <span className="tier-chip" style={{ background: isPackage ? "#123C2E" : tierColor(tier) }}>{tier}</span>
+                <span className="tier-chip" style={{ background: isPackage ? "#111114" : tierColor(tier) }}>{tier}</span>
                 <span style={{ fontSize: 13, color: "var(--inkSoft)" }}>{items.length} sponsor{items.length !== 1 ? "s" : ""} · {money0(items.reduce((a, s) => a + s.amountPledged, 0))} pledged</span>
               </div>
               <table className="tbl">
@@ -585,7 +585,7 @@ export default function Sponsorships() {
                           <td>
                             <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
                               {s.name}
-                              {s.packageName && <span className="tier-chip" style={{ background: TIERS.find((x) => x.name === s.packageName)?.color || "#123C2E" }}>{s.packageName}</span>}
+                              {s.packageName && <span className="tier-chip" style={{ background: TIERS.find((x) => x.name === s.packageName)?.color || "#111114" }}>{s.packageName}</span>}
                             </div>
                             {s.benefits && <div style={{ fontSize: 11.5, color: "var(--inkSoft)", marginTop: 2 }}>{s.benefits}</div>}
                           </td>
@@ -692,10 +692,10 @@ export default function Sponsorships() {
           ))}
 
           <div style={{ marginTop: 24, background: "var(--pine)", color: "#EAF1EC", borderRadius: 14, padding: "18px 22px", display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
-            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Total sponsors</div><div style={{ fontFamily: "'Fraunces',serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{sponsors.length}</div></div>
-            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Total pledged</div><div style={{ fontFamily: "'Fraunces',serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{money0(totPledged)}</div></div>
-            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Total paid</div><div style={{ fontFamily: "'Fraunces',serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{money0(totPaid)}</div></div>
-            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Outstanding</div><div style={{ fontFamily: "'Fraunces',serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{money0(totBalance)}</div></div>
+            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Total sponsors</div><div style={{ fontFamily: "'Figtree',ui-sans-serif,system-ui,sans-serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{sponsors.length}</div></div>
+            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Total pledged</div><div style={{ fontFamily: "'Figtree',ui-sans-serif,system-ui,sans-serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{money0(totPledged)}</div></div>
+            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Total paid</div><div style={{ fontFamily: "'Figtree',ui-sans-serif,system-ui,sans-serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{money0(totPaid)}</div></div>
+            <div><div style={{ fontSize: 11, color: "var(--goldSoft)", textTransform: "uppercase", letterSpacing: ".08em", fontWeight: 600 }}>Outstanding</div><div style={{ fontFamily: "'Figtree',ui-sans-serif,system-ui,sans-serif", fontSize: 23, fontWeight: 600, color: "#fff", marginTop: 4 }}>{money0(totBalance)}</div></div>
           </div>
         </>)}
       </div>

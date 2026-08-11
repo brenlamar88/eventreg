@@ -24,14 +24,14 @@ const EVENT = {
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-    :root{--bone:#F4EFE6;--paper:#FBF8F2;--ink:#1B1915;--inkSoft:#5C564C;
-      --pine:#123C2E;--pine2:#0C2A20;--pineLine:#23604A;--gold:#B9842B;--goldSoft:#E2C282;
-      --line:#DCD2C0;--ok:#2E7D5B;--warn:#A9601C;}
+    :root{--bone:#F9F9F9;--paper:#FFFFFF;--ink:#111114;--inkSoft:#86868B;
+      --pine:#111114;--pine2:#000000;--pineLine:#E4E4E7;--gold:#F74D00;--goldSoft:#FDDBCC;
+      --line:#E7E7E8;--ok:#1E9E64;--warn:#B45309;}
     *{box-sizing:border-box}
-    .tkt-page{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+    .tkt-page{font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
     .tkt-head{background:var(--pine2);color:#cfe0d7;padding:14px 22px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;text-align:center;}
     .tkt-wrap{max-width:520px;margin:0 auto;padding:40px 22px 80px;width:100%;}
-    .tkt-title{font-family:'Fraunces',Georgia,serif;font-size:32px;font-weight:600;margin:0 0 6px;text-align:center;}
+    .tkt-title{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:32px;font-weight:600;margin:0 0 6px;text-align:center;}
     .tkt-meta{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;color:var(--inkSoft);font-size:14px;margin-bottom:26px;}
     .tkt-meta div{display:flex;align-items:center;gap:7px;}
     .tkt-meta svg{color:var(--gold);}

@@ -14,15 +14,15 @@ import { getUser, authHeaders, onAuthChange } from "./authClient.js";
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-    :root{--bone:#F4EFE6;--paper:#FBF8F2;--ink:#1B1915;--inkSoft:#5C564C;
-      --pine:#123C2E;--pine2:#0C2A20;--pineLine:#23604A;--gold:#B9842B;--goldSoft:#E2C282;
-      --line:#DCD2C0;--ok:#2E7D5B;--warn:#A9601C;}
+    :root{--bone:#F9F9F9;--paper:#FFFFFF;--ink:#111114;--inkSoft:#86868B;
+      --pine:#111114;--pine2:#000000;--pineLine:#E4E4E7;--gold:#F74D00;--goldSoft:#FDDBCC;
+      --line:#E7E7E8;--ok:#1E9E64;--warn:#B45309;}
     *{box-sizing:border-box}
-    .inv-page{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;}
+    .inv-page{font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;}
     .inv-head{background:var(--pine2);padding:14px 22px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;text-align:center;}
     .inv-wrap{max-width:520px;margin:0 auto;padding:48px 22px 80px;width:100%;}
     .inv-card{background:var(--paper);border:1.5px solid var(--line);border-radius:18px;padding:28px 26px;}
-    .inv-title{font-family:'Fraunces',Georgia,serif;font-size:28px;font-weight:600;margin:0 0 8px;text-align:center;}
+    .inv-title{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:28px;font-weight:600;margin:0 0 8px;text-align:center;}
     .inv-sub{color:var(--inkSoft);font-size:14px;text-align:center;margin-bottom:22px;}
     .btn{font-family:inherit;font-weight:700;font-size:14px;border-radius:11px;cursor:pointer;padding:11px 20px;display:inline-flex;align-items:center;gap:8px;border:1.5px solid transparent;background:var(--pine);color:#fff;text-decoration:none;}
     .btn:hover{background:var(--pine2);} .btn:disabled{opacity:.4;cursor:not-allowed;}

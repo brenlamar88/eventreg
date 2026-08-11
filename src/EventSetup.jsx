@@ -18,17 +18,17 @@ const DEMO_EVENTS = [
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-    :root{--bone:#F4EFE6;--bone2:#EBE3D4;--paper:#FBF8F2;--ink:#1B1915;--inkSoft:#5C564C;
-      --pine:#123C2E;--pine2:#0C2A20;--pineLine:#23604A;--gold:#B9842B;--goldSoft:#E2C282;
-      --line:#DCD2C0;--ok:#2E7D5B;--warn:#A9601C;}
+    :root{--bone:#F9F9F9;--bone2:#F1F1F2;--paper:#FFFFFF;--ink:#111114;--inkSoft:#86868B;
+      --pine:#111114;--pine2:#000000;--pineLine:#E4E4E7;--gold:#F74D00;--goldSoft:#FDDBCC;
+      --line:#E7E7E8;--ok:#1E9E64;--warn:#B45309;}
     *{box-sizing:border-box}
-    .spo{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
-    .serif{font-family:'Fraunces',Georgia,serif;}
+    .spo{font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;-webkit-font-smoothing:antialiased;}
+    .serif{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;}
     .wrap{max-width:1200px;margin:0 auto;padding:0 22px;}
     .head{background:linear-gradient(160deg,var(--pine),var(--pine2));color:#EAF1EC;}
     .head-in{padding:30px 0 0;}
     .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
-    .head h1{font-family:'Fraunces',serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
+    .head h1{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:34px;font-weight:600;margin:8px 0 0;letter-spacing:-.01em;}
     .head .sub{color:#A9C0B5;font-size:14px;margin-top:4px;padding-bottom:28px;}
     .panel{padding:24px 0 90px;}
     .settings{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
@@ -42,7 +42,7 @@ const Styles = () => (
     .btn.ghost:hover{border-color:var(--pine);}
     .btn.sm{font-size:12px;padding:6px 11px;}
     .addcard{background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:20px;margin-bottom:22px;}
-    .addhdr{font-family:'Fraunces',serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+    .addhdr{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
     .fgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;}
     .f{display:flex;flex-direction:column;gap:5px;}
     .f label{font-size:11.5px;font-weight:600;color:#4a463d;}
@@ -283,7 +283,7 @@ export default function EventSetup() {
 
       <div className="wrap panel">
         {IS_DEMO && (
-          <div style={{background:"#B9842B",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
+          <div style={{background:"#F74D00",color:"#fff",borderRadius:10,padding:"10px 18px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontWeight:600,fontSize:14}}>
             <AlertTriangle size={16}/> DEMO MODE — Sample data only. No real data is shown or saved. Color preview works; saving is disabled.
           </div>
         )}

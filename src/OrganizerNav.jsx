@@ -15,7 +15,7 @@ export default function OrganizerNav() {
     <nav style={{
       background: "var(--pine2)", borderBottom: "1px solid rgba(255,255,255,.1)",
       display: "flex", alignItems: "center", gap: 4, padding: "0 22px",
-      fontFamily: "'Hanken Grotesk',ui-sans-serif,system-ui", flexWrap: "wrap",
+      fontFamily: "'Figtree',ui-sans-serif,system-ui", flexWrap: "wrap",
     }}>
       <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".15em", textTransform: "uppercase", color: "var(--gold)", marginRight: 10, padding: "12px 0" }}>{getEventConfig().orgShort} 2026</span>
       {links.map(({ label, href, app }) => {

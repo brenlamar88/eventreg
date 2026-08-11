@@ -2,7 +2,7 @@
 // - Navigations: network-first (fresh deploys win), cached shell when offline.
 // - Hashed /assets/*: cache-first (immutable by name).
 // - /api/* is NEVER cached — data correctness lives in IndexedDB + the outbox.
-const CACHE = "eventreg-shell-v1";
+const CACHE = "eventreg-shell-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => {
