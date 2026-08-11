@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
-  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download,
+  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download, Gavel,
 } from "lucide-react";
 import AdminShell from "./AdminShell.jsx";
 import { DEMO_LOTS, DEMO_PEOPLE, DEMO_REGISTRANTS, DEMO_SPONSORS, DEMO_LOT_FEE } from "./demoData.js";
@@ -43,6 +43,16 @@ function downloadCsv(filename, rows) {
 }
 
 /* ---- data layer (yellow-kite via same-origin API; falls back to local) ---- */
+// <input type="datetime-local"> uses local wall-clock with no zone; convert
+// to/from the ISO timestamps the API stores.
+const isoToLocal = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso); if (isNaN(d)) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const localToIso = (local) => { if (!local) return null; const d = new Date(local); return isNaN(d) ? null : d.toISOString(); };
+
 const dbLotToUI = (r) => ({
   id: r.id, lotNo: r.lot_no, description: r.description || "",
   category: r.auction_category || (r.donated ? "Donated" : ""),
@@ -54,6 +64,12 @@ const dbLotToUI = (r) => ({
   amount: Number(r.amount) || 0, amountPaid: Number(r.amount_paid) || 0, donated: !!r.donated,
   delivered: !!r.delivered, checkNo: r.check_no || "", checkDate: r.check_date || "",
   buyerPaid: !!r.buyer_paid, paymentMethod: r.payment_method || "cash",
+  // Silent-auction live bidding (phase-m)
+  biddingOpen: !!r.bidding_open, startingBid: r.starting_bid == null ? "" : Number(r.starting_bid),
+  minIncrement: r.min_increment == null ? "" : Number(r.min_increment),
+  bidCloseAt: r.bid_close_at || "", imageUrl: r.image_url || "",
+  currentBid: r.current_bid == null ? null : Number(r.current_bid),
+  highBidderNo: r.high_bidder_no || "", bidCount: Number(r.bid_count) || 0,
 });
 
 const Styles = () => (
@@ -135,6 +151,18 @@ const Styles = () => (
     .edit-row td{background:#f0f4f0;padding:14px 12px;border-bottom:2px solid var(--pine);}
     .edit-grid{display:grid;grid-template-columns:80px 1fr 160px 160px 100px 160px 100px 100px auto;gap:10px;align-items:end;}
     @media(max-width:1100px){.edit-grid{grid-template-columns:repeat(3,1fr);}}
+    .bid-panel{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:4px 0;}
+    .bid-panel-h{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink);}
+    .bid-panel-h svg{color:var(--gold);}
+    .bid-panel-sub{font-weight:400;color:var(--inkSoft);font-size:12px;}
+    .bid-grid{display:grid;grid-template-columns:auto repeat(3,140px) 1fr;gap:10px;align-items:end;margin-top:10px;}
+    @media(max-width:900px){.bid-grid{grid-template-columns:repeat(2,1fr);}}
+    .bid-toggle{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink);white-space:nowrap;padding-bottom:8px;}
+    .bmini{font-family:inherit;font-size:13px;padding:7px 9px;border:1.5px solid var(--line);border-radius:8px;width:100%;background:var(--bone);}
+    .bmini:focus{border-color:var(--gold);outline:none;}
+    .bid-status{margin-top:10px;font-size:13px;color:var(--ink);display:flex;align-items:center;flex-wrap:wrap;}
+    .bid-status.muted{color:var(--inkSoft);}
+    .bid-status b{color:var(--gold);}
     .grand{margin-top:18px;background:var(--pine);color:#EAF1EC;border-radius:14px;padding:18px 22px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
     @media(max-width:760px){.grand{grid-template-columns:repeat(2,1fr);}}
     .grand .l{font-size:11px;color:var(--goldSoft);text-transform:uppercase;letter-spacing:.08em;font-weight:600;}
@@ -178,7 +206,7 @@ export default function AuctionSettlement() {
   const [grandFormErr, setGrandFormErr] = useState("");
   const [saleFilter, setSaleFilter] = useState("All");
   const setEF = (k, v) => setEditForm((p) => ({ ...p, [k]: v }));
-  const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, saleType: l.saleType || "Live", consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated }); };
+  const startEdit = (l) => { setEditId(l.id); setEditForm({ lotNo: l.lotNo, description: l.description, category: l.category, saleType: l.saleType || "Live", consignorName: l.consignorName, consignorRanch: l.consignorRanch, donated: l.donated, biddingOpen: l.biddingOpen, startingBid: l.startingBid, minIncrement: l.minIncrement === "" ? 10 : l.minIncrement, bidCloseAt: isoToLocal(l.bidCloseAt), imageUrl: l.imageUrl }); };
   const cancelEdit = () => { setEditId(null); setEditForm({}); };
 
   const connected = db === "live";
@@ -247,6 +275,7 @@ export default function AuctionSettlement() {
   const rememberPerson = (name, ranch) => { if (name) setPeople((prev) => prev.some((p) => p.name.toLowerCase() === name.toLowerCase()) ? prev : [...prev, { name, ranch: ranch || "" }]); };
 
   const saveLotEdit = async () => {
+    const isSilent = (editForm.saleType || "Live") === "Silent";
     const patch = {
       lotNo: editForm.lotNo.trim(), description: editForm.description.trim(),
       category: editForm.donated ? "Donated" : editForm.category,
@@ -254,14 +283,35 @@ export default function AuctionSettlement() {
       consignorName: editForm.consignorName.trim(), consignorRanch: editForm.consignorRanch.trim(),
       donated: editForm.donated,
       consignor: display(editForm.consignorName.trim(), editForm.consignorRanch.trim()),
+      // Live-bidding config (Silent items only)
+      biddingOpen: isSilent ? !!editForm.biddingOpen : false,
+      startingBid: editForm.startingBid === "" ? 0 : Number(editForm.startingBid),
+      minIncrement: editForm.minIncrement === "" ? 10 : Number(editForm.minIncrement),
+      bidCloseAt: isoToLocal(editForm.bidCloseAt) ? editForm.bidCloseAt : editForm.bidCloseAt, // keep local value for UI
+      imageUrl: (editForm.imageUrl || "").trim(),
     };
     setLots((p) => p.map((l) => l.id === editId ? { ...l, ...patch } : l));
     if (!IS_DEMO && connected && typeof editId === "string" && !editId.startsWith("tmp-")) {
       try {
-        await fetch(withEvent("/api/lots"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category, sale_type: patch.saleType, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated }) });
+        await fetch(withEvent("/api/lots"), { method: "PATCH", headers: hdr(), body: JSON.stringify({
+          id: editId, lot_no: patch.lotNo, description: patch.description, auction_category: patch.category,
+          sale_type: patch.saleType, consignor_name: patch.consignorName, consignor_ranch: patch.consignorRanch, donated: patch.donated,
+          bidding_open: patch.biddingOpen, starting_bid: patch.startingBid, min_increment: patch.minIncrement,
+          bid_close_at: localToIso(editForm.bidCloseAt), image_url: patch.imageUrl || null,
+        }) });
       } catch {}
     }
     cancelEdit();
+  };
+
+  // Close a silent-auction item and settle the winner into the ledger.
+  const finalizeLot = async (id) => {
+    if (IS_DEMO || !connected) return;
+    try {
+      await fetch(withEvent("/api/bids"), { method: "POST", headers: hdr(), body: JSON.stringify({ action: "finalize", lotId: id }) });
+      const lr = await fetch(withEvent("/api/lots"), { headers: hdr() });
+      if (lr.ok) { const { lots: dbLots } = await lr.json(); setLots(dbLots.map(dbLotToUI)); }
+    } catch {}
   };
 
   /* ---- connect: load lots + fee + registered people ---- */
@@ -513,6 +563,23 @@ export default function AuctionSettlement() {
                               <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
                               <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
                               <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => setEF("donated", e.target.checked)} /> 100% donation to {CFG.orgShort}</label></div>
+                              {editForm.saleType === "Silent" && (
+                                <div className="bid-panel" style={{gridColumn:"1 / -1"}}>
+                                  <div className="bid-panel-h"><Gavel size={14}/> Mobile bidding <span className="bid-panel-sub">— attendees bid from their phones at /?app=auction</span></div>
+                                  <div className="bid-grid">
+                                    <label className="bid-toggle"><input type="checkbox" checked={!!editForm.biddingOpen} onChange={(e)=>setEF("biddingOpen", e.target.checked)} /> Bidding open</label>
+                                    <div className="f"><label>Starting bid ($)</label><input type="number" min="0" className="bmini" value={editForm.startingBid} onChange={(e)=>setEF("startingBid", e.target.value)} /></div>
+                                    <div className="f"><label>Min increment ($)</label><input type="number" min="1" className="bmini" value={editForm.minIncrement} onChange={(e)=>setEF("minIncrement", e.target.value)} /></div>
+                                    <div className="f"><label>Closes at</label><input type="datetime-local" className="bmini" value={isoToLocal(editForm.bidCloseAt)} onChange={(e)=>setEF("bidCloseAt", localToIso(e.target.value))} /></div>
+                                    <div className="f" style={{gridColumn:"span 2"}}><label>Photo URL (optional)</label><input className="bmini" placeholder="https://…" value={editForm.imageUrl||""} onChange={(e)=>setEF("imageUrl", e.target.value)} /></div>
+                                  </div>
+                                  {(() => { const cur = lots.find((x)=>x.id===editId) || {}; return cur.bidCount > 0 ? (
+                                    <div className="bid-status">Live: <b>{money(cur.currentBid||0)}</b> · leader <b>#{cur.highBidderNo||"—"}</b> · {cur.bidCount} bid{cur.bidCount===1?"":"s"}
+                                      <button className="btn ghost" style={{fontSize:12,padding:"5px 10px",marginLeft:10}} onClick={()=>finalizeLot(editId)}><Check size={12}/> Close &amp; settle winner</button>
+                                    </div>
+                                  ) : <div className="bid-status muted">No bids yet. Toggle “Bidding open”, set a close time, then Save.</div>; })()}
+                                </div>
+                              )}
                               <div className="f" style={{flexDirection:"row",gap:8,alignItems:"flex-end"}}>
                                 <button className="btn" style={{fontSize:13,padding:"7px 14px"}} onClick={saveLotEdit}><Check size={14}/> Save</button>
                                 <button className="btn ghost" style={{fontSize:13,padding:"7px 12px"}} onClick={cancelEdit}><X size={14}/> Cancel</button>
