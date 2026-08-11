@@ -1,5 +1,6 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import "./theme.css";
 import { loadEventConfig, applyTheme } from "./eventConfig.js";
 
 // Public registration: "/"  |  Auction settlement: "/?app=settlement"

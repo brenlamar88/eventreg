@@ -50,7 +50,7 @@ export default function LoginPanel({ onSignedIn, note }) {
 
   return (
     <div className="login-panel" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontFamily: "'Fraunces',Georgia,serif", fontSize: 17, fontWeight: 600 }}>Sign in</div>
+      <div style={{ fontFamily: "'Figtree',ui-sans-serif,system-ui,sans-serif", fontSize: 17, fontWeight: 600 }}>Sign in</div>
       {note && <div className="hint" style={{ fontSize: 12.5 }}>{note}</div>}
       {sent ? (
         <div className="hint" style={{ color: "var(--ok)", display: "flex", alignItems: "center", gap: 7 }}>

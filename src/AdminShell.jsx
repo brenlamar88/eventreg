@@ -40,7 +40,7 @@ const GROUPS = [
 
 const Styles = () => (
   <style>{`
-    .ash{display:flex;min-height:100vh;background:var(--bone);font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);}
+    .ash{display:flex;min-height:100vh;background:var(--bone);font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);}
     .ash-side{width:236px;flex-shrink:0;background:var(--pine2);color:#cfe0d7;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
     .ash-brand{padding:18px 18px 12px;border-bottom:1px solid rgba(255,255,255,.08);}
     .ash-eyebrow{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--goldSoft);font-weight:700;}

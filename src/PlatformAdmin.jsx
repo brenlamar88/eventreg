@@ -19,17 +19,17 @@ const money0 = (n) => "$" + Number(n).toLocaleString("en-US", { maximumFractionD
 const Styles = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
-    :root{--bone:#F4EFE6;--bone2:#EBE3D4;--paper:#FBF8F2;--ink:#1B1915;--inkSoft:#5C564C;
-      --pine:#123C2E;--pine2:#0C2A20;--pineLine:#23604A;--gold:#B9842B;--goldSoft:#E2C282;
-      --line:#DCD2C0;--ok:#2E7D5B;--warn:#A9601C;}
+    :root{--bone:#F9F9F9;--bone2:#F1F1F2;--paper:#FFFFFF;--ink:#111114;--inkSoft:#86868B;
+      --pine:#111114;--pine2:#000000;--pineLine:#E4E4E7;--gold:#F74D00;--goldSoft:#FDDBCC;
+      --line:#E7E7E8;--ok:#1E9E64;--warn:#B45309;}
     *{box-sizing:border-box}
-    .pa{font-family:'Hanken Grotesk',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;}
-    .serif{font-family:'Fraunces',Georgia,serif;}
+    .pa{font-family:'Figtree',ui-sans-serif,system-ui;color:var(--ink);background:var(--bone);min-height:100vh;}
+    .serif{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;}
     .wrap{max-width:1000px;margin:0 auto;padding:0 22px;}
     .head{background:linear-gradient(160deg,var(--pine),var(--pine2));color:#EAF1EC;}
     .head-in{padding:30px 0;}
     .eyebrow{font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--goldSoft);font-weight:700;}
-    .head h1{font-family:'Fraunces',serif;font-size:32px;font-weight:600;margin:8px 0 0;}
+    .head h1{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:32px;font-weight:600;margin:8px 0 0;}
     .head .sub{color:#A9C0B5;font-size:14px;margin-top:4px;}
     .panel{padding:24px 0 90px;}
     .settings{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;}
@@ -40,7 +40,7 @@ const Styles = () => (
     .btn.ghost{background:transparent;color:var(--pine);border-color:var(--line);}
     .btn.sm{font-size:12px;padding:6px 11px;}
     .addcard{background:var(--paper);border:1.5px solid var(--line);border-radius:16px;padding:20px;margin-bottom:22px;}
-    .addhdr{font-family:'Fraunces',serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+    .addhdr{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:17px;font-weight:600;display:flex;align-items:center;gap:9px;margin-bottom:14px;}
     .fgrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;}
     .f{display:flex;flex-direction:column;gap:5px;}
     .f label{font-size:11.5px;font-weight:600;color:#4a463d;}
@@ -51,7 +51,7 @@ const Styles = () => (
     .hint{font-size:12.5px;color:var(--inkSoft);display:flex;align-items:center;gap:7px;}
     .org{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:12px;}
     .org-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
-    .org-name{font-family:'Fraunces',serif;font-size:18px;font-weight:600;}
+    .org-name{font-family:'Figtree',ui-sans-serif,system-ui,sans-serif;font-size:18px;font-weight:600;}
     .org-slug{font-size:12px;color:var(--inkSoft);font-family:ui-monospace,monospace;}
     .chips{display:flex;gap:6px;flex-wrap:wrap;}
     .chip{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;}
