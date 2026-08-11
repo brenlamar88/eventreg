@@ -207,28 +207,28 @@ const Styles = () => (
     .wrap{max-width:1080px;margin:0 auto;padding:0 22px;}
     .grid{display:grid;grid-template-columns:1fr 350px;gap:32px;align-items:start;}
     @media(max-width:900px){.grid{grid-template-columns:1fr;}}
-    .util{background:var(--pine2);color:#cfe0d7;}
+    .util{background:var(--pine2);color:#d4d4da;}
     .util-in{display:flex;align-items:center;justify-content:space-between;padding:10px 0;gap:10px;flex-wrap:wrap;}
     .brandtag{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
-    .vtoggle{display:flex;gap:4px;background:#0a2118;border-radius:999px;padding:4px;}
-    .vtoggle button{font-family:inherit;border:none;background:transparent;color:#9DB3A8;font-weight:600;font-size:13px;padding:7px 15px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px;}
+    .vtoggle{display:flex;gap:4px;background:#1c1c20;border-radius:999px;padding:4px;}
+    .vtoggle button{font-family:inherit;border:none;background:transparent;color:#9a9aa2;font-weight:600;font-size:13px;padding:7px 15px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px;}
     .vtoggle button.on{background:var(--gold);color:#1b1407;}
     .hero{position:relative;overflow:hidden;color:var(--bone);background:radial-gradient(120% 90% at 12% 0%,var(--pineLine) 0%,transparent 55%),radial-gradient(120% 120% at 100% 0%,var(--pine2) 0%,transparent 60%),linear-gradient(160deg,var(--pine),var(--pine2));}
     .hero-in{position:relative;z-index:2;padding:64px 0 58px;}
     .eyebrow{font-size:12px;letter-spacing:.26em;text-transform:uppercase;color:var(--goldSoft);font-weight:600;}
     .hero h1{font-size:clamp(40px,7vw,78px);line-height:.96;margin:14px 0 0;font-weight:600;letter-spacing:-.02em;}
-    .hero-sub{max-width:520px;margin:18px 0 0;color:#D9E5DE;font-size:17.5px;line-height:1.5;}
+    .hero-sub{max-width:520px;margin:18px 0 0;color:#d4d4da;font-size:17.5px;line-height:1.5;}
     .meta{display:flex;flex-wrap:wrap;gap:24px;margin-top:30px;}
-    .meta div{display:flex;align-items:center;gap:9px;font-size:14.5px;color:#E7EFE9;}
+    .meta div{display:flex;align-items:center;gap:9px;font-size:14.5px;color:#e6e6ea;}
     .meta svg{color:var(--goldSoft);}
     .cta{margin-top:36px;display:inline-flex;align-items:center;gap:10px;background:var(--gold);color:#1b1407;border:none;font-family:inherit;font-weight:700;font-size:16px;padding:16px 28px;border-radius:999px;cursor:pointer;transition:.2s;}
-    .cta:hover{background:#cf982f;transform:translateY(-1px);}
-    .price-from{margin-top:16px;font-size:13.5px;color:#BFCFC6;}
+    .cta:hover{background:#d93f00;transform:translateY(-1px);}
+    .price-from{margin-top:16px;font-size:13.5px;color:#b9b9c1;}
     .stepbar{background:var(--pine2);border-bottom:1px solid var(--pineLine);}
     .steps{display:flex;gap:6px;padding:13px 0;flex-wrap:wrap;}
-    .stp{display:flex;align-items:center;gap:9px;padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;color:#9DB3A8;}
-    .stp .num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;border:1.5px solid #3c6d59;color:#9DB3A8;}
-    .stp.active{color:#F4EFE6;background:#1a4d3a;}
+    .stp{display:flex;align-items:center;gap:9px;padding:7px 13px;border-radius:999px;font-size:13px;font-weight:600;color:#9a9aa2;}
+    .stp .num{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;border:1.5px solid #3a3a42;color:#9a9aa2;}
+    .stp.active{color:#F9F9F9;background:#1f1f24;}
     .stp.active .num{background:var(--gold);border-color:var(--gold);color:#1b1407;}
     .stp.done .num{background:transparent;border-color:var(--gold);color:var(--gold);}
     .panel{padding:40px 0 90px;}
@@ -274,7 +274,7 @@ const Styles = () => (
     .sum-h .dt{font-size:12.5px;color:#A9C0B5;margin-top:3px;}
     .sum-b{padding:18px 22px;}
     .li{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:7px 0;color:#D4E0D9;}
-    .li .sub{font-size:11.5px;color:#9DB3A8;}
+    .li .sub{font-size:11.5px;color:#9a9aa2;}
     .li .amt{font-variant-numeric:tabular-nums;white-space:nowrap;}
     .sum-div{height:1px;background:var(--pineLine);margin:8px 0;}
     .total{display:flex;justify-content:space-between;align-items:baseline;padding-top:8px;}
@@ -321,7 +321,7 @@ const Styles = () => (
     .tbl tr:last-child td{border-bottom:none;}
     .badge-s{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;}
     .b-jot{background:#e7eef0;color:#2a5560;}
-    .b-onl{background:#eef1e7;color:#4a6321;}
+    .b-onl{background:#eef1e7;color:#1E9E64;}
     .b-comp{background:#f1e9da;color:#7a5a17;}
     .b-paid{background:#e4f0e9;color:var(--ok);}
     .b-pend{background:#f6ece0;color:var(--warn);}
@@ -528,11 +528,11 @@ function StationShell({ icon, title, subtitle, children, onExit, exitLabel }) {
       <Styles />
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 22px", borderBottom: "1px solid var(--pineLine)" }}>
         <span className="brandtag">{EVENT.org}</span>
-        {onExit && <button onClick={onExit} style={{ background: "none", border: "1px solid #3c6d59", borderRadius: 999, color: "#9DB3A8", fontFamily: "inherit", fontWeight: 600, fontSize: 12, padding: "6px 14px", cursor: "pointer" }}>{exitLabel || "Exit station"}</button>}
+        {onExit && <button onClick={onExit} style={{ background: "none", border: "1px solid #3a3a42", borderRadius: 999, color: "#9a9aa2", fontFamily: "inherit", fontWeight: 600, fontSize: 12, padding: "6px 14px", cursor: "pointer" }}>{exitLabel || "Exit station"}</button>}
       </div>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "34px 22px 60px" }}>
         <div style={{ color: "var(--goldSoft)", display: "flex", alignItems: "center", gap: 10, fontSize: 13, letterSpacing: ".2em", textTransform: "uppercase", fontWeight: 600 }}>{icon}{title}</div>
-        <h1 className="mrd-serif" style={{ color: "#F4EFE6", fontSize: "clamp(28px,5vw,44px)", margin: "10px 0 6px", fontWeight: 600, textAlign: "center" }}>{EVENT.name}</h1>
+        <h1 className="mrd-serif" style={{ color: "#F9F9F9", fontSize: "clamp(28px,5vw,44px)", margin: "10px 0 6px", fontWeight: 600, textAlign: "center" }}>{EVENT.name}</h1>
         {subtitle && <p style={{ color: "#A9C0B5", fontSize: 15.5, margin: "0 0 26px", textAlign: "center", maxWidth: 480 }}>{subtitle}</p>}
         {children}
       </div>
@@ -635,7 +635,7 @@ function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, e
           </div>
         )}
         {cameraError ? (
-          <div style={{ fontSize: 14.5, color: "#FDDBCC", background: "#1a4d3a", border: "1.5px solid #3c6d59", borderRadius: 14, padding: "16px 18px" }}>
+          <div style={{ fontSize: 14.5, color: "#FDDBCC", background: "#1f1f24", border: "1.5px solid #3a3a42", borderRadius: 14, padding: "16px 18px" }}>
             <AlertTriangle size={15} style={{ display: "inline", verticalAlign: "middle", marginRight: 7 }} />{cameraError}
           </div>
         ) : (
@@ -657,7 +657,7 @@ function ArmedScanStation({ passcode, accepted, onAccepted, manual, setManual, e
             <button onClick={() => setConflicts([])} style={{ marginLeft: 10, background: "none", border: "none", color: "#b4471f", fontFamily: "inherit", fontWeight: 700, fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>Dismiss</button>
           </div>
         )}
-        <p style={{ color: "#9DB3A8", fontSize: 13, marginTop: 16, textAlign: "center" }}>
+        <p style={{ color: "#9a9aa2", fontSize: 13, marginTop: 16, textAlign: "center" }}>
           {accepted} checked in at this station{pending > 0 ? ` · ${pending} queued to sync` : ""} · not registered yet? Use the registration iPad.
         </p>
       </div>
@@ -1169,7 +1169,7 @@ export default function BoilOnTheBend() {
   const PublicHeader = () => (
     <div className="util"><div className="wrap util-in">
       <span className="brandtag">{EVENT.org}</span>
-      <a href={eventLink("/?view=admin")} style={{ color: "#9DB3A8", fontSize: 12.5, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <a href={eventLink("/?view=admin")} style={{ color: "#9a9aa2", fontSize: 12.5, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
         <Lock size={13} /> Organizer sign in
       </a>
     </div></div>
@@ -1501,7 +1501,7 @@ export default function BoilOnTheBend() {
 
   /* ---------- ORGANIZER (roster) ---------- */
   if (view === "admin") {
-    const dotColor = dbState === "live" ? "var(--ok)" : dbState === "offline" ? "var(--warn)" : "#9DB3A8";
+    const dotColor = dbState === "live" ? "var(--ok)" : dbState === "offline" ? "var(--warn)" : "#9a9aa2";
     return (
       <AdminShell active="roster"><div className="mrd" style={{ minHeight: "auto" }}><Styles />
         <div className="wrap panel anim">
@@ -1544,7 +1544,7 @@ export default function BoilOnTheBend() {
 
           <div className="rtools" style={{justifyContent:"space-between"}}>
             <div className="searchbox"><Search size={16} color="var(--inkSoft)" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, phone…" /></div>
-            <button className="org-btn" style={{display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",fontWeight:700,fontSize:13,padding:"8px 14px",borderRadius:9,cursor:"pointer",border:"1.5px solid #2d5a42",background:"transparent",color:"#2d5a42"}} onClick={() => {
+            <button className="org-btn" style={{display:"inline-flex",alignItems:"center",gap:6,fontFamily:"inherit",fontWeight:700,fontSize:13,padding:"8px 14px",borderRadius:9,cursor:"pointer",border:"1.5px solid #111114",background:"transparent",color:"#111114"}} onClick={() => {
               const hdr = ["Bidder #","First Name","Last Name","Full Name","Ranch / Company","Sponsor","Email","Phone","Party Size","Status","Source","Amount Paid","Checked In"];
               const rows = roster.map((p) => { const parts = (p.name||"").trim().split(/\s+/); const first = parts[0]||""; const last = parts.slice(1).join(" ")||""; return [p.bidderNumber||"", first, last, p.name||"", p.ranch||"", p.sponsorName||"", p.email||"", p.phone||"", p.party||1, p.status||"", p.source||"", p.amount||0, p.checkedIn?"Yes":"No"]; });
               downloadCsv("registrants-2026.csv",[hdr,...rows]);
