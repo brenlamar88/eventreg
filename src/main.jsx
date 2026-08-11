@@ -26,6 +26,8 @@ async function boot() {
     ? await import("./AuctionSettlement.jsx")
     : app === "sponsorships"
     ? await import("./Sponsorships.jsx")
+    : app === "auction"
+    ? await import("./Auction.jsx")
     : app === "setup"
     ? await import("./EventSetup.jsx")
     : app === "platform"

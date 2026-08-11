@@ -20,6 +20,7 @@ import eventLogo from "./_lib/event-logo.js";
 import googleWallet from "./_lib/google-wallet.js";
 import lotCheckout from "./_lib/lot-checkout.js";
 import lots from "./_lib/lots.js";
+import bids from "./_lib/bids.js";
 import organizations from "./_lib/organizations.js";
 import connect from "./_lib/connect.js";
 import billing from "./_lib/billing.js";
@@ -42,6 +43,7 @@ const ROUTES = {
   "google-wallet": googleWallet,
   "lot-checkout": lotCheckout,
   lots,
+  bids,
   organizations,
   connect,
   billing,
