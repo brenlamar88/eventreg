@@ -17,16 +17,20 @@ const H = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "applic
 export async function writeEventSettings(eventId, patch) {
   const body = { ...patch, updated_at: new Date().toISOString() };
 
-  // 1. Try to update the existing row (ask for the rows back so we know if
-  //    any matched).
+  // 1. Try to update the existing row. Use count=exact (not return=representation)
+  //    because event_settings has no primary key and PostgREST rejects
+  //    return=representation on tables without one. Content-Range tells us how
+  //    many rows were affected without needing the row back.
   const upd = await fetch(`${SB}/rest/v1/event_settings?event_id=eq.${encodeURIComponent(eventId)}`, {
     method: "PATCH",
-    headers: { ...H, Prefer: "return=representation" },
+    headers: { ...H, Prefer: "return=minimal,count=exact" },
     body: JSON.stringify(body),
   });
   if (!upd.ok) return { ok: false, status: upd.status, error: await upd.text().catch(() => "") };
-  const updated = await upd.json().catch(() => []);
-  if (Array.isArray(updated) && updated.length > 0) return { ok: true, status: 200 };
+  // Content-Range: <affected>/* — "0/*" means no rows matched.
+  const cr = upd.headers.get("content-range") || "";
+  const affected = parseInt(cr.split("/")[0], 10);
+  if (!isNaN(affected) && affected > 0) return { ok: true, status: 200 };
 
   // 2. No existing row — insert one.
   const ins = await fetch(`${SB}/rest/v1/event_settings`, {
