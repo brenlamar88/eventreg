@@ -3,7 +3,7 @@ import {
   Calendar, MapPin, Check, ChevronRight, ChevronLeft, Users, Plus, Minus,
   ShieldCheck, Lock, Trash2, UserPlus, Search, CheckCircle2, Circle,
   Upload, Heart, LayoutGrid, Ticket, Database, RefreshCw, AlertTriangle,
-  ScanLine, CreditCard, FileText,
+  ScanLine, CreditCard, FileText, Printer,
 } from "lucide-react";
 import TicketQR from "./TicketQR.jsx";
 import AdminShell from "./AdminShell.jsx";
@@ -13,6 +13,7 @@ import {
   queueOp, pendingCount, getMeta, fetchT, flushOutbox,
 } from "./offline.js";
 import { getEventConfig, withEvent, eventLink, getAdminKey, setAdminKey } from "./eventConfig.js";
+import { printBadge, getAutoPrint, setAutoPrint, getBadgeSize, setBadgeSize, BADGE_SIZES } from "./badgePrint.js";
 
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_DEMO = URL_PARAMS.get("demo") === "true";
@@ -337,6 +338,15 @@ const Styles = () => (
     .door-ci-btn{font-family:inherit;font-weight:700;font-size:15px;padding:13px 22px;border-radius:12px;cursor:pointer;border:none;display:flex;align-items:center;gap:8px;transition:.2s;background:var(--pine);color:#fff;white-space:nowrap;}
     .door-ci-btn:hover{background:var(--pine2);}
     .door-ci-btn.done{background:var(--ok);cursor:default;}
+    .door-print-btn{font-family:inherit;font-weight:600;font-size:13.5px;padding:11px 15px;border-radius:12px;cursor:pointer;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);display:flex;align-items:center;gap:7px;white-space:nowrap;transition:.15s;}
+    .door-print-btn:hover{border-color:var(--gold);color:var(--gold);}
+    .badge-ctl{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 4px;padding:11px 14px;background:var(--paper);border:1px solid var(--line);border-radius:12px;}
+    .badge-ctl label{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;}
+    .badge-ctl select{font-family:inherit;font-size:13px;padding:6px 9px;border:1.5px solid var(--line);border-radius:8px;background:var(--bone);color:var(--ink);}
+    .badge-ctl .sw{position:relative;width:38px;height:22px;border-radius:999px;background:var(--line);transition:.2s;flex:none;}
+    .badge-ctl .sw.on{background:var(--gold);}
+    .badge-ctl .sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s;}
+    .badge-ctl .sw.on::after{transform:translateX(16px);}
     .door-flash{background:#e4f0e9;color:var(--ok);border:1.5px solid #b8dcc6;border-radius:12px;padding:14px 18px;font-weight:600;font-size:14px;display:flex;align-items:center;gap:9px;margin-bottom:18px;animation:rise .3s ease;}
     .pay-toggle{display:flex;border:1.5px solid var(--line);border-radius:11px;overflow:hidden;}
     .pay-toggle button{flex:1;font-family:inherit;font-weight:600;font-size:14px;padding:11px 18px;border:none;background:#fff;cursor:pointer;transition:.15s;color:var(--inkSoft);}
@@ -885,6 +895,8 @@ export default function BoilOnTheBend() {
   const [doorUnlocked, setDoorUnlocked] = useState(false);
   const [doorSearch, setDoorSearch] = useState("");
   const [doorFlash, setDoorFlash] = useState(null);
+  const [autoPrint, setAP] = useState(getAutoPrint());
+  const [badgeSize, setBS] = useState(getBadgeSize());
   const [walkInForm, setWalkInForm] = useState({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: "cash" });
   const [walkInMsg, setWalkInMsg] = useState("");
   const [walkInLoading, setWalkInLoading] = useState(false);
@@ -1335,6 +1347,19 @@ export default function BoilOnTheBend() {
                     <ScanLine size={17} /> Scan tickets
                   </button>
                 </div>
+                <div className="badge-ctl">
+                  <label onClick={() => { const v = !autoPrint; setAP(v); setAutoPrint(v); }}>
+                    <span className={`sw${autoPrint ? " on" : ""}`} />
+                    <Printer size={15} /> Auto-print badge on check-in
+                  </label>
+                  <label style={{ cursor: "default" }}>
+                    Badge size
+                    <select value={badgeSize} onChange={(e) => { setBS(e.target.value); setBadgeSize(e.target.value); }}>
+                      {Object.entries(BADGE_SIZES).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+                    </select>
+                  </label>
+                  <span style={{ fontSize: 12, color: "var(--inkSoft)" }}>Prints to any AirPrint label printer</span>
+                </div>
                 {scanOpen && (
                   <ScanModal
                     passcode={passcode}
@@ -1343,6 +1368,9 @@ export default function BoilOnTheBend() {
                       // Reflect the scan in the local roster immediately (by id,
                       // not index — the 20 s poll may reorder rows underneath us)
                       setRoster((r) => r.map((p) => (p.id === reg?.id ? { ...p, checkedIn: true } : p)));
+                      if (autoPrint && reg) {
+                        printBadge({ name: reg.name, ranch: reg.ranch, bidderNumber: reg.bidder_number, sponsorName: reg.sponsor_name }, badgeSize);
+                      }
                     }}
                   />
                 )}
@@ -1380,6 +1408,9 @@ export default function BoilOnTheBend() {
                                 Mark paid {money((p.party || 1) * TICKET.price)}
                               </button>
                             )}
+                            <button className="door-print-btn" title="Print name badge" onClick={() => printBadge(p, badgeSize)}>
+                              <Printer size={16} /> Badge
+                            </button>
                             <button
                               className={`door-ci-btn${p.checkedIn ? " done" : ""}`}
                               onClick={() => {
@@ -1387,6 +1418,7 @@ export default function BoilOnTheBend() {
                                   toggleCheckIn(p);
                                   setDoorFlash(`${p.name} — party of ${p.party || 1} checked in!`);
                                   setTimeout(() => setDoorFlash(null), 5000);
+                                  if (autoPrint) printBadge(p, badgeSize);
                                 }
                               }}
                             >
@@ -1555,7 +1587,7 @@ export default function BoilOnTheBend() {
           </div>
 
           <table className="tbl">
-            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Sponsor</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th></tr></thead>
+            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Sponsor</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
                 const { first, last } = splitName(p.name);
@@ -1580,6 +1612,7 @@ export default function BoilOnTheBend() {
                     <td>{p.party || 1}</td>
                     <td><span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span></td>
                     <td><button className={`ci ${p.checkedIn ? "on" : ""}`} onClick={() => toggleCheckIn(p)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? "In" : "Check in"}</button></td>
+                    <td><button className="ci" title="Print name badge" onClick={() => printBadge(p, badgeSize)}><Printer size={16} /></button></td>
                     <td><button className="ci" style={{ color: "#b4471f" }} onClick={() => deleteRegistrant(p)}><Trash2 size={16} /></button></td>
                   </tr>
                 );
