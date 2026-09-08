@@ -88,6 +88,26 @@ export default function AdminShell({ active, children }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
 
+  const PasscodeEntry = () => {
+    const [pc, setPc] = useState("");
+    return (
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="password"
+          placeholder="Organizer passcode"
+          value={pc}
+          onChange={(e) => setPc(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && pc.trim()) { setAdminKey(pc.trim()); window.location.reload(); } }}
+          style={{ fontFamily: "inherit", fontSize: 14, padding: "10px 12px", border: "1.5px solid var(--line)", borderRadius: 9, flex: 1, outline: "none" }}
+        />
+        <button
+          onClick={() => { if (pc.trim()) { setAdminKey(pc.trim()); window.location.reload(); } }}
+          style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 13.5, padding: "10px 16px", background: "var(--pine)", color: "#fff", border: "none", borderRadius: 9, cursor: "pointer" }}
+        >Enter</button>
+      </div>
+    );
+  };
+
   // Track auth session; undefined while loading, null when definitely signed out.
   useEffect(() => {
     let alive = true;
@@ -126,7 +146,7 @@ export default function AdminShell({ active, children }) {
   // Still checking session — render nothing to avoid flash.
   if (session === undefined) return <><Styles /></>;
 
-  // No session and no stored passcode — show login gate.
+  // No session and no stored passcode — show login gate with passcode bypass.
   const adminKey = getAdminKey();
   if (!session && !adminKey) {
     return (
@@ -134,13 +154,16 @@ export default function AdminShell({ active, children }) {
         <div className="ash-login-card">
           <div className="ash-login-logo">Organizer console</div>
           <div className="ash-login-title">Welcome back</div>
-          <div className="ash-login-sub">Sign in with your email to manage your event.</div>
+          <div className="ash-login-sub">Sign in with your email, or enter your organizer passcode below.</div>
           <LoginPanel
             onSignedIn={() => {
-              // Reload so AdminShell re-reads the session from Supabase.
               window.location.reload();
             }}
           />
+          <div style={{ marginTop: 24, borderTop: "1.5px solid var(--line)", paddingTop: 20 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--inkSoft)", marginBottom: 10, letterSpacing: ".06em", textTransform: "uppercase" }}>Or use passcode</div>
+            <PasscodeEntry />
+          </div>
         </div>
       </div>
     );
