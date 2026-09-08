@@ -333,6 +333,12 @@ export default function BoilOnTheBend() {
   const [dbState, setDbState] = useState("idle"); // idle | loading | live | offline
   const [dbMsg, setDbMsg] = useState("");
 
+  // Pre-reg form state
+  const [preReg, setPreReg] = useState({ firstName: "", lastName: "", email: "", phone: "", ranch: "", party: 1, amount: TICKET.price, sponsorId: "", status: "Paid" });
+  const [preRegMsg, setPreRegMsg] = useState("");
+  const [preRegLoading, setPreRegLoading] = useState(false);
+  const [showPreReg, setShowPreReg] = useState(false);
+
   // Door view state
   const [doorUnlocked, setDoorUnlocked] = useState(false);
   const [doorSearch, setDoorSearch] = useState("");
@@ -532,6 +538,27 @@ export default function BoilOnTheBend() {
         await fetch(ROSTER_ENDPOINT, { method: "PATCH", headers: { "Content-Type": "application/json", "x-organizer-key": passcode }, body: JSON.stringify({ id: target.id, sponsor_id: sponsorId || null }) });
       } catch {}
     }
+  };
+
+  const addPreReg = async () => {
+    const { firstName, lastName, email, phone, ranch, party, amount, sponsorId, status } = preReg;
+    if (!firstName.trim() || !lastName.trim()) { setPreRegMsg("First and last name are required."); return; }
+    setPreRegLoading(true); setPreRegMsg("");
+    try {
+      const bidderNo = String(await nextBidderNumber());
+      const row = {
+        name: `${firstName} ${lastName}`.trim(), email: email.trim() || null,
+        phone: phone.trim() || null, ranch: ranch.trim() || null,
+        party: Number(party) || 1, source: "Pre-registered", status,
+        amount: Number(amount) || 0, bidder_number: bidderNo,
+        sponsor_id: sponsorId || null,
+      };
+      await dbInsert(row);
+      setRoster((r) => [{ ...row, checkedIn: false, date: new Date().toISOString().slice(0, 10), bidderNumber: bidderNo, sponsorId: row.sponsor_id, sponsorName: sponsors.find((s) => s.id === row.sponsor_id)?.name || null }, ...r]);
+      setPreReg({ firstName: "", lastName: "", email: "", phone: "", ranch: "", party: 1, amount: TICKET.price, sponsorId: "", status: "Paid" });
+      setPreRegMsg(`Added ${row.name} (Bidder #${bidderNo})`);
+    } catch (err) { setPreRegMsg("Error: " + err.message); }
+    setPreRegLoading(false);
   };
 
   const nextBidderNumber = async () => {
@@ -845,6 +872,67 @@ export default function BoilOnTheBend() {
             <div className="stat"><div className="n">{totalGuests}</div><div className="l">Total guests</div></div>
             <div className="stat"><div className="n">{checkedIn}</div><div className="l">Checked in</div></div>
             <div className="stat"><div className="n">{money(revenue).replace(".00", "")}</div><div className="l">Revenue</div></div>
+          </div>
+
+          <div className="importbox" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showPreReg ? 16 : 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, fontWeight: 700, fontSize: 15 }}><UserPlus size={17} color="var(--pine)" /> Add pre-registered attendee</div>
+              <button className="org-btn" style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 13, padding: "7px 14px", borderRadius: 9, cursor: "pointer", border: "1.5px solid var(--pine)", background: showPreReg ? "var(--pine)" : "transparent", color: showPreReg ? "#fff" : "var(--pine)" }} onClick={() => { setShowPreReg((v) => !v); setPreRegMsg(""); }}>{showPreReg ? "Cancel" : "Add attendee"}</button>
+            </div>
+            {showPreReg && (
+              <div>
+                <p style={{ fontSize: 13, color: "var(--inkSoft)", margin: "0 0 14px" }}>Manually add someone who pre-registered and paid outside the online flow.</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>First Name *</label>
+                    <input style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box" }} value={preReg.firstName} onChange={(e) => setPreReg((p) => ({ ...p, firstName: e.target.value }))} placeholder="Jane" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Last Name *</label>
+                    <input style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box" }} value={preReg.lastName} onChange={(e) => setPreReg((p) => ({ ...p, lastName: e.target.value }))} placeholder="Boudreaux" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Email</label>
+                    <input style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box" }} value={preReg.email} onChange={(e) => setPreReg((p) => ({ ...p, email: e.target.value }))} placeholder="jane@example.com" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Phone</label>
+                    <input style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box" }} value={preReg.phone} onChange={(e) => setPreReg((p) => ({ ...p, phone: e.target.value }))} placeholder="(337) 555-0199" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Ranch / Company</label>
+                    <input style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box" }} value={preReg.ranch} onChange={(e) => setPreReg((p) => ({ ...p, ranch: e.target.value }))} placeholder="Double T Ranch" />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Sponsor</label>
+                    <select style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box", background: "#fff" }} value={preReg.sponsorId} onChange={(e) => setPreReg((p) => ({ ...p, sponsorId: e.target.value }))}>
+                      <option value="">— None —</option>
+                      {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Party Size</label>
+                    <input type="number" min="1" max="20" style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box" }} value={preReg.party} onChange={(e) => setPreReg((p) => ({ ...p, party: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Amount Paid ($)</label>
+                    <input type="number" min="0" step="0.01" style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box" }} value={preReg.amount} onChange={(e) => setPreReg((p) => ({ ...p, amount: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: "var(--inkSoft)", display: "block", marginBottom: 4 }}>Status</label>
+                    <select style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, width: "100%", boxSizing: "border-box", background: "#fff" }} value={preReg.status} onChange={(e) => setPreReg((p) => ({ ...p, status: e.target.value }))}>
+                      <option value="Paid">Paid</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Comp">Comp</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <button className="btn btn-p" onClick={addPreReg} disabled={preRegLoading}><UserPlus size={16} /> {preRegLoading ? "Adding…" : "Add to roster"}</button>
+                  {preRegMsg && <span style={{ fontSize: 13, color: preRegMsg.startsWith("Error") ? "var(--warn)" : "var(--ok)", fontWeight: 600 }}>{preRegMsg}</span>}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="importbox">
