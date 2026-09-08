@@ -13,7 +13,7 @@ import {
   queueOp, pendingCount, getMeta, fetchT, flushOutbox,
 } from "./offline.js";
 import { getEventConfig, withEvent, eventLink, getAdminKey, setAdminKey } from "./eventConfig.js";
-import { printBadge, getAutoPrint, setAutoPrint, getBadgeSize, setBadgeSize, BADGE_SIZES } from "./badgePrint.js";
+import { printBadge, printBadgeSheet, getAutoPrint, setAutoPrint, getBadgeSize, setBadgeSize, BADGE_SIZES, BADGE_SHEETS } from "./badgePrint.js";
 
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_DEMO = URL_PARAMS.get("demo") === "true";
@@ -897,6 +897,7 @@ export default function BoilOnTheBend() {
   const [doorFlash, setDoorFlash] = useState(null);
   const [autoPrint, setAP] = useState(getAutoPrint());
   const [badgeSize, setBS] = useState(getBadgeSize());
+  const [sheetKey, setSheetKey] = useState("6up");
   const [walkInForm, setWalkInForm] = useState({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: "cash" });
   const [walkInMsg, setWalkInMsg] = useState("");
   const [walkInLoading, setWalkInLoading] = useState(false);
@@ -1359,6 +1360,14 @@ export default function BoilOnTheBend() {
                     </select>
                   </label>
                   <span style={{ fontSize: 12, color: "var(--inkSoft)" }}>Prints to any AirPrint label printer</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                    <select value={sheetKey} onChange={(e) => setSheetKey(e.target.value)} title="Badges per sheet">
+                      {Object.entries(BADGE_SHEETS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+                    </select>
+                    <button className="door-print-btn" title="Pre-print a sheet of badges for everyone" onClick={() => printBadgeSheet(roster, sheetKey)}>
+                      <Printer size={15} /> Print all badges ({roster.length})
+                    </button>
+                  </div>
                 </div>
                 {scanOpen && (
                   <ScanModal
