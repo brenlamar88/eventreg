@@ -4,6 +4,8 @@ import {
   ChevronDown, LogOut, Menu, X, Building2,
 } from "lucide-react";
 import { getEventConfig, eventLink, getAdminKey, setAdminKey } from "./eventConfig.js";
+import { getSession, onAuthChange, authHeaders, signOut } from "./authClient.js";
+import LoginPanel from "./LoginPanel.jsx";
 
 /* ============================================================================
    AdminShell — the ONE organizer navigation.
@@ -62,6 +64,11 @@ const Styles = () => (
     .ash-foot a:hover,.ash-foot button:hover{color:#fff;}
     .ash-main{flex:1;min-width:0;}
     .ash-topbar{display:none;}
+    .ash-login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--bone);}
+    .ash-login-card{background:var(--paper);border:1.5px solid var(--line);border-radius:18px;padding:40px 36px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.08);}
+    .ash-login-logo{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--goldSoft);font-weight:700;margin-bottom:4px;}
+    .ash-login-title{font-size:22px;font-weight:800;margin-bottom:4px;color:var(--ink);}
+    .ash-login-sub{font-size:13px;color:var(--ink2);margin-bottom:28px;}
     @media(max-width:900px){
       .ash{flex-direction:column;}
       .ash-side{position:fixed;z-index:80;left:0;top:0;bottom:0;height:100vh;transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 40px rgba(0,0,0,.4);}
@@ -76,27 +83,68 @@ const Styles = () => (
 
 export default function AdminShell({ active, children }) {
   const cfg = getEventConfig();
+  const [session, setSession] = useState(undefined); // undefined = loading
   const [events, setEvents] = useState([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
 
-  // Populate the event switcher only when signed in with the master passcode
-  // (the list endpoint is master-gated); otherwise we just show the current
-  // event's name with no switcher.
+  // Track auth session; undefined while loading, null when definitely signed out.
   useEffect(() => {
+    let alive = true;
+    getSession().then((s) => { if (alive) setSession(s); });
+    const { data } = onAuthChange((s) => { if (alive) setSession(s); });
+    return () => { alive = false; data?.subscription?.unsubscribe?.(); };
+  }, []);
+
+  // Populate the event switcher when authenticated (session or passcode).
+  useEffect(() => {
+    if (session === undefined) return; // still loading
     const key = getAdminKey();
-    if (!key) return;
-    fetch("/api/event-config?list=1", { headers: { "x-organizer-key": key } })
+    if (!session && !key) return;
+    authHeaders().then((ah) => {
+      const headers = { ...ah };
+      if (key) headers["x-organizer-key"] = key;
+      return fetch("/api/event-config?list=1", { headers });
+    })
       .then((r) => (r.ok ? r.json() : []))
       .then((j) => setEvents(Array.isArray(j) ? j : []))
       .catch(() => {});
-  }, []);
+  }, [session]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    setAdminKey("");
+    window.location.href = eventLink("/");
+  };
 
   const switchTo = (ev) => {
     const p = new URLSearchParams(window.location.search);
     if (ev.is_default) p.delete("event"); else p.set("event", ev.event_id);
     window.location.href = window.location.pathname + "?" + p.toString();
   };
+
+  // Still checking session — render nothing to avoid flash.
+  if (session === undefined) return <><Styles /></>;
+
+  // No session and no stored passcode — show login gate.
+  const adminKey = getAdminKey();
+  if (!session && !adminKey) {
+    return (
+      <div className="ash-login-wrap"><Styles />
+        <div className="ash-login-card">
+          <div className="ash-login-logo">Organizer console</div>
+          <div className="ash-login-title">Welcome back</div>
+          <div className="ash-login-sub">Sign in with your email to manage your event.</div>
+          <LoginPanel
+            onSignedIn={() => {
+              // Reload so AdminShell re-reads the session from Supabase.
+              window.location.reload();
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   const Sidebar = (
     <aside className={`ash-side${navOpen ? " open" : ""}`}>
@@ -134,7 +182,7 @@ export default function AdminShell({ active, children }) {
       <div className="ash-foot">
         <a href="/?app=platform"><Building2 size={14} /> Organizations</a>
         <a href={eventLink("/")} target="_blank" rel="noreferrer"><ExternalLink size={14} /> View public page</a>
-        <button onClick={() => { setAdminKey(""); window.location.href = eventLink("/"); }}><LogOut size={14} /> Sign out</button>
+        <button onClick={handleSignOut}><LogOut size={14} /> Sign out</button>
       </div>
     </aside>
   );
