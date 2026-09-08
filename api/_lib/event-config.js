@@ -8,7 +8,11 @@
 //                        param, resolves the DEFAULT event (is_default row,
 //                        else 'boil85').
 //   GET  ?list=1       → ORGANIZER-GATED. All events:
-//                        [{event_id, event_name, event_year, is_default}].
+//                        [{event_id, event_name, event_year, is_default,
+//                          org_slug}].
+//                        Master key → all events. Org passcode/session with
+//                        ?client=<slug> → that org's events. Session with no
+//                        client param → events from the user's own orgs.
 //   PUT  ?event=<id>   → ORGANIZER-GATED partial upsert. A PUT to a new slug
 //                        CREATES the event. Extra fields: eventYear (int),
 //                        isDefault (true → this event becomes the default).
@@ -17,6 +21,7 @@ import { requestedEvent, isValidSlug, DEFAULT_EVENT, urlParam } from "./event.js
 import { authorizeOrganizer } from "./auth.js";
 import { writeEventSettings } from "./settings-write.js";
 import { orgBySlug } from "./org.js";
+import { sessionUser } from "./session.js";
 
 const SB = process.env.SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -48,33 +53,67 @@ const COLOR_FIELDS = {
 };
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
+// Select clause for organizer event lists (includes org embed for org_slug).
+const LIST_SELECT = "event_id,event_name,event_year,is_default,organizer_passcode,org_id,organizations(slug)";
+
+function formatListRows(rows) {
+  return rows
+    .filter((row) => row.event_id)
+    .map(({ organizer_passcode, organizations, ...row }) => ({
+      ...row,
+      has_passcode: !!organizer_passcode,
+      org_slug: organizations?.slug || null,
+    }));
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
-      // Organizer event list. All-events is a cross-org view (MASTER only);
-      // scoping with ?client=<slug> lets that org's owner list just theirs.
+      // Organizer event list.
       if (req.query?.list || urlParam(req, "list")) {
         const slug = String(req.query?.client || urlParam(req, "client") || "").trim().toLowerCase();
-        // ?client= → org owner (or master) may list that org's events;
-        // otherwise the full list is master-only.
-        const ok = slug ? await authorizeOrganizer(req) : await authorizeOrganizer(req, { masterOnly: true });
-        if (!ok) return res.status(401).json({ error: "Unauthorized" });
-        let filter = "";
+
         if (slug) {
+          // ?client= → org owner (or master) may list that org's events.
+          if (!(await authorizeOrganizer(req))) return res.status(401).json({ error: "Unauthorized" });
           const org = await orgBySlug(slug);
           if (!org) return res.status(404).json({ error: "Unknown organization" });
-          filter = `&org_id=eq.${org.id}`;
+          const r = await fetch(
+            `${SB}/rest/v1/event_settings?select=${LIST_SELECT}&order=is_default.desc,event_year.desc,event_id.asc&org_id=eq.${org.id}`,
+            { headers: H }
+          );
+          if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
+          return res.status(200).json(formatListRows(await r.json()));
         }
+
+        // No ?client= — master key returns ALL events.
+        const masterOk = await authorizeOrganizer(req, { masterOnly: true });
+        if (masterOk) {
+          const r = await fetch(
+            `${SB}/rest/v1/event_settings?select=${LIST_SELECT}&order=is_default.desc,event_year.desc,event_id.asc`,
+            { headers: H }
+          );
+          if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
+          return res.status(200).json(formatListRows(await r.json()));
+        }
+
+        // Session user without master key: return events from their orgs.
+        const user = await sessionUser(req);
+        if (!user) return res.status(401).json({ error: "Unauthorized" });
+        const mr = await fetch(
+          `${SB}/rest/v1/memberships?user_id=eq.${encodeURIComponent(user.id)}&select=org_id`,
+          { headers: H }
+        );
+        if (!mr.ok) return res.status(500).json({ error: "Server error" });
+        const mems = await mr.json();
+        const orgIds = [...new Set(mems.map((m) => m.org_id).filter(Boolean))];
+        if (!orgIds.length) return res.status(200).json([]);
         const r = await fetch(
-          `${SB}/rest/v1/event_settings?select=event_id,event_name,event_year,is_default,organizer_passcode,org_id&order=is_default.desc,event_year.desc,event_id.asc${filter}`,
+          `${SB}/rest/v1/event_settings?select=${LIST_SELECT}&order=is_default.desc,event_year.desc,event_id.asc&org_id=in.(${orgIds.join(",")})`,
           { headers: H }
         );
         if (!r.ok) throw new Error(`PostgREST ${r.status}: ${await r.text()}`);
-        // Never leak the passcode value — only whether one is set.
-        const rows = (await r.json()).filter((row) => row.event_id).map(({ organizer_passcode, ...row }) => ({
-          ...row, has_passcode: !!organizer_passcode,
-        }));
-        return res.status(200).json(rows);
+        return res.status(200).json(formatListRows(await r.json()));
       }
 
       // Public branding for one event. No explicit param → the default event.

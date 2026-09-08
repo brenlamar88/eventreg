@@ -1,18 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Database, AlertTriangle, Check, Palette, Type, DollarSign, Image, Save,
-  RefreshCw, Eye, Info, CalendarDays, Plus, Star, LayoutGrid,
+  RefreshCw, Eye, Info, Plus, LayoutGrid, Users, UserPlus, Trash2,
 } from "lucide-react";
 import AdminShell from "./AdminShell.jsx";
 import { DEFAULTS, applyTheme, withEvent, EVENT_PARAM, getEventConfig, setAdminKey, getAdminKey } from "./eventConfig.js";
+import { authHeaders } from "./authClient.js";
 
 const IS_DEMO = new URLSearchParams(window.location.search).get("demo") === "true";
 const LS_KEY = "eventreg-config-v1" + (EVENT_PARAM ? ":" + EVENT_PARAM : "");
 const SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,40}$/;
 
 const DEMO_EVENTS = [
-  { event_id: "boil85", event_name: "Boil on the Bend", event_year: 2026, is_default: true, has_passcode: false },
-  { event_id: "spring-gala", event_name: "Spring Gala", event_year: 2026, is_default: false, has_passcode: true },
+  { event_id: "boil85", event_name: "Boil on the Bend", event_year: 2026, is_default: true, has_passcode: false, org_slug: null },
+  { event_id: "spring-gala", event_name: "Spring Gala", event_year: 2026, is_default: false, has_passcode: true, org_slug: null },
 ];
 
 const Styles = () => (
@@ -57,6 +58,9 @@ const Styles = () => (
     .hintbox{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:14px 18px;font-size:13px;color:var(--inkSoft);display:flex;align-items:flex-start;gap:10px;line-height:1.5;}
     .savedmsg{background:#e4f0e9;color:var(--ok);border:1.5px solid #bcd9c9;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:8px;}
     .errmsg{background:#fde8e0;color:var(--warn);border:1.5px solid #eccdb9;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:8px;}
+    .team-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;}
+    .team-row:last-child{border-bottom:none;}
+    .role-chip{font-size:11px;font-weight:700;background:var(--bone2);border-radius:999px;padding:2px 9px;white-space:nowrap;}
   `}</style>
 );
 
@@ -106,12 +110,30 @@ export default function EventSetup() {
   const [evErr, setEvErr] = useState("");
   const [evBusy, setEvBusy] = useState(false);
 
+  // Team management state
+  const [team, setTeam] = useState(null);         // null = not yet loaded
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [invEmail, setInvEmail] = useState("");
+  const [invRole, setInvRole] = useState("staff");
+  const [invBusy, setInvBusy] = useState(false);
+  const [invMsg, setInvMsg] = useState({ text: "", ok: true });
+  const [invLink, setInvLink] = useState("");
+  const [copied, setCopied] = useState(false);
+
   const connected = db === "live";
   const canEdit = connected || IS_DEMO;
   const hdr = () => ({ "Content-Type": "application/json", "x-organizer-key": passcode });
   const setF = (k, v) => { setForm((p) => ({ ...p, [k]: v })); setSaveState("idle"); };
   const setC = (k, v) => { setColors((p) => ({ ...p, [k]: v })); setSaveState("idle"); };
   const dotColor = db === "live" ? "var(--ok)" : db === "offline" ? "var(--warn)" : "#9DB3A8";
+
+  // Headers for team API calls — sends both passcode and session Bearer.
+  const teamHdr = useCallback(async () => {
+    const ah = await authHeaders();
+    const h = { "Content-Type": "application/json", ...ah };
+    if (passcode) h["x-organizer-key"] = passcode;
+    return h;
+  }, [passcode]);
 
   useEffect(() => {
     if (!IS_DEMO) return;
@@ -130,13 +152,34 @@ export default function EventSetup() {
   // event from the list, else the resolved boot config.
   const currentId = EVENT_PARAM || events.find((e) => e.is_default)?.event_id || getEventConfig().eventId;
   const curEv = events.find((e) => e.event_id === currentId);
+  const orgSlug = curEv?.org_slug || null;
 
   const refreshEvents = async (key) => {
     try {
-      const r = await fetch("/api/event-config?list=1", { headers: { "x-organizer-key": key ?? passcode } });
+      const ah = await authHeaders();
+      const headers = { ...ah };
+      const k = key ?? passcode;
+      if (k) headers["x-organizer-key"] = k;
+      const r = await fetch("/api/event-config?list=1", { headers });
       if (r.ok) { const j = await r.json(); setEvents(Array.isArray(j) ? j : []); }
     } catch { /* list stays as-is */ }
   };
+
+  // Load team members when org slug is known and user is authenticated.
+  const refreshTeam = useCallback(async (slug) => {
+    const s = slug || orgSlug;
+    if (!s || IS_DEMO) return;
+    setTeamLoading(true);
+    try {
+      const r = await fetch(`/api/members?client=${encodeURIComponent(s)}`, { headers: await teamHdr() });
+      if (r.ok) setTeam(await r.json());
+    } catch {}
+    setTeamLoading(false);
+  }, [orgSlug, teamHdr]);
+
+  useEffect(() => {
+    if (canEdit && orgSlug) refreshTeam(orgSlug);
+  }, [orgSlug, canEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const connect = async () => {
     setDb("loading"); setMsg("");
@@ -207,6 +250,45 @@ export default function EventSetup() {
       setPcMsg(clear ? "Passcode cleared — this event now uses the master passcode." : "Passcode saved. Door staff for this event use it to sign in.");
       await refreshEvents();
     } catch (e) { setPcMsg(e.message); }
+  };
+
+  const sendInvite = async () => {
+    const email = invEmail.trim();
+    if (!email || !orgSlug) return;
+    setInvBusy(true); setInvMsg({ text: "", ok: true }); setInvLink(""); setCopied(false);
+    try {
+      const r = await fetch(`/api/members?client=${encodeURIComponent(orgSlug)}`, {
+        method: "POST",
+        headers: await teamHdr(),
+        body: JSON.stringify({ email, role: invRole }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `Error ${r.status}`);
+      setInvEmail("");
+      setInvMsg({ text: `Invite sent to ${email}. They'll get an email with a sign-in link.`, ok: true });
+      setInvLink(j.inviteLink || "");
+      refreshTeam();
+    } catch (e) {
+      setInvMsg({ text: e.message, ok: false });
+    }
+    setInvBusy(false);
+  };
+
+  const removeMember = async (userId) => {
+    if (!orgSlug) return;
+    try {
+      await fetch(`/api/members?client=${encodeURIComponent(orgSlug)}`, {
+        method: "DELETE",
+        headers: await teamHdr(),
+        body: JSON.stringify({ userId }),
+      });
+      refreshTeam();
+    } catch {}
+  };
+
+  const copyLink = () => {
+    if (!invLink) return;
+    navigator.clipboard.writeText(invLink).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
   };
 
   const save = async () => {
@@ -363,6 +445,110 @@ export default function EventSetup() {
                   <div>Registration station: <code>/?event={currentId}&amp;station=register</code></div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ---- team members ---- */}
+        {canEdit && orgSlug && (
+          <div className="addcard">
+            <div className="addhdr"><Users size={17} /> Team</div>
+
+            {teamLoading && team === null && (
+              <div style={{ fontSize: 12.5, color: "var(--inkSoft)", marginBottom: 12 }}>Loading team…</div>
+            )}
+
+            {team && (
+              <>
+                {/* Current members */}
+                {team.members?.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--inkSoft)", textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 8 }}>Members</div>
+                    {team.members.map((m) => (
+                      <div key={m.user_id} className="team-row">
+                        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.email || m.user_id}</span>
+                        <span className="role-chip">{m.role}</span>
+                        <button className="btn ghost sm" style={{ color: "var(--warn)", fontSize: 11, padding: "4px 8px" }} onClick={() => removeMember(m.user_id)}>
+                          <Trash2 size={12} /> Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pending invites */}
+                {team.invites?.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--inkSoft)", textTransform: "uppercase", letterSpacing: ".12em", marginBottom: 8 }}>Pending invites</div>
+                    {team.invites.map((inv, i) => (
+                      <div key={i} className="team-row" style={{ color: "var(--inkSoft)" }}>
+                        <span style={{ flex: 1 }}>{inv.email}</span>
+                        <span className="role-chip">{inv.role}</span>
+                        <span style={{ fontSize: 11.5 }}>expires {new Date(inv.expires_at).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!team.members?.length && !team.invites?.length && (
+                  <div style={{ fontSize: 12.5, color: "var(--inkSoft)", marginBottom: 14 }}>No team members yet. Use the form below to invite your first teammate.</div>
+                )}
+              </>
+            )}
+
+            {/* Invite form */}
+            <div style={{ borderTop: team ? "1px solid var(--line)" : "none", paddingTop: team ? 14 : 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Invite a team member</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div className="f" style={{ flex: 1, minWidth: 200 }}>
+                  <label>Email address</label>
+                  <input
+                    type="email"
+                    style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, background: "#fff", outline: "none", width: "100%" }}
+                    placeholder="teammate@example.com"
+                    value={invEmail}
+                    disabled={invBusy}
+                    onChange={(e) => { setInvEmail(e.target.value); setInvMsg({ text: "", ok: true }); setInvLink(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && invEmail.trim() && sendInvite()}
+                  />
+                </div>
+                <div className="f" style={{ minWidth: 130 }}>
+                  <label>Role</label>
+                  <select
+                    value={invRole}
+                    onChange={(e) => setInvRole(e.target.value)}
+                    disabled={invBusy}
+                    style={{ fontFamily: "inherit", fontSize: 13.5, padding: "9px 11px", border: "1.5px solid var(--line)", borderRadius: 9, background: "#fff", color: "var(--ink)", outline: "none" }}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="staff">Staff</option>
+                    <option value="door">Door only</option>
+                  </select>
+                </div>
+                <button className="btn sm" disabled={invBusy || !invEmail.trim()} onClick={sendInvite} style={{ marginBottom: 1 }}>
+                  <UserPlus size={14} />{invBusy ? "Sending…" : "Send invite"}
+                </button>
+              </div>
+
+              {invMsg.text && (
+                <div style={{ fontSize: 12.5, marginTop: 8, color: invMsg.ok ? "var(--ok)" : "var(--warn)", display: "flex", alignItems: "flex-start", gap: 6 }}>
+                  {invMsg.ok ? <Check size={13} style={{ marginTop: 1, flexShrink: 0 }} /> : <AlertTriangle size={13} style={{ marginTop: 1, flexShrink: 0 }} />}
+                  {invMsg.text}
+                </div>
+              )}
+
+              {invLink && (
+                <div style={{ marginTop: 10, background: "var(--bone2)", borderRadius: 9, padding: "10px 12px", fontSize: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ flex: 1, wordBreak: "break-all", color: "var(--inkSoft)", fontFamily: "monospace" }}>{invLink}</span>
+                  <button className="btn ghost sm" onClick={copyLink}>
+                    {copied ? <><Check size={12} /> Copied!</> : "Copy link"}
+                  </button>
+                </div>
+              )}
+
+              <p style={{ fontSize: 12, color: "var(--inkSoft)", margin: "12px 0 0", lineHeight: 1.6 }}>
+                <strong>Admin</strong> — full organizer access. <strong>Staff</strong> — same as admin but can't change settings or manage the team. <strong>Door only</strong> — check-in screen only; no access to financials or settings.
+              </p>
             </div>
           </div>
         )}
