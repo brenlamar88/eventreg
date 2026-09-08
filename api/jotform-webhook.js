@@ -46,8 +46,7 @@ function getFullName(fields) {
   if (combined) return combined;
   const first = fields["q3_firstName[first]"] || fields["q4_firstName[first]"] || getField(fields, "q3_firstName", "q4_firstName") || "";
   const last = fields["q3_firstName[last]"] || fields["q4_firstName[last]"] || getField(fields, "q3_lastName", "q4_lastName", "q5_lastName") || "";
-  const full = [first, last].filter(Boolean).join(" ");
-  return full || null;
+  return [first, last].filter(Boolean).join(" ") || null;
 }
 
 function getPhone(fields) {

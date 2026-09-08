@@ -15,14 +15,20 @@
 //   ORGANIZER_PASSCODE        = a passphrase you give door staff
 // ---------------------------------------------------------------------------
 
+import { requestedEvent } from "./event.js";
+import { authorizeOrganizer } from "./auth.js";
 const SB_URL = process.env.SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const PASSCODE = process.env.ORGANIZER_PASSCODE;
 const TABLE = "registrants";
-const EVENT_ID = "boil85";
 
 export default async function handler(req, res) {
-  if (!req.headers["x-organizer-key"] || req.headers["x-organizer-key"] !== PASSCODE) {
+  // Reading the roster and toggling check-in are door (checkin) actions;
+  // editing bidder #/phone/sponsor/status or deleting requires manage.
+  const bodyKeys = Object.keys(req.body || {}).filter((k) => k !== "id");
+  const checkinOnlyPatch = req.method === "PATCH" && bodyKeys.every((k) => k === "checked_in" || k === "checked_in_at");
+  const capability = req.method === "GET" || checkinOnlyPatch ? "checkin" : "manage";
+  if (!(await authorizeOrganizer(req, { capability }))) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -32,7 +38,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === "GET") {
       // Fetch registrants with sponsor name via PostgREST resource embedding
-      const r = await fetch(`${base}?event_id=eq.${EVENT_ID}&order=created_at.desc&select=*,sponsors(id,name)`, { headers });
+      const r = await fetch(`${base}?event_id=eq.${encodeURIComponent(requestedEvent(req))}&order=created_at.desc&select=*,sponsors(id,name)`, { headers });
       const data = await r.json();
       // Coalesce ranch from notes; flatten sponsor name
       const rows = Array.isArray(data) ? data.map((row) => ({
@@ -51,6 +57,9 @@ export default async function handler(req, res) {
       if ("bidder_number" in (req.body || {})) patch.bidder_number = bidder_number ?? null;
       if ("phone" in (req.body || {})) patch.phone = phone ?? null;
       if ("sponsor_id" in (req.body || {})) patch.sponsor_id = sponsor_id ?? null;
+      // Cashier settling a pay-at-the-door registration (station flow)
+      if ("status" in (req.body || {})) patch.status = req.body.status;
+      if ("amount" in (req.body || {})) patch.amount = Number(req.body.amount) || 0;
       const r = await fetch(`${base}?id=eq.${id}`, {
         method: "PATCH",
         headers: { ...headers, Prefer: "return=minimal" },

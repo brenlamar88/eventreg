@@ -6,7 +6,12 @@ functions in `/api`.
 
 ## Stack
 - Frontend: Vite + React (`src/BoilOnTheBend.jsx`)
-- Payments: Stripe Checkout (`api/create-checkout-session.js`, `api/stripe-webhook.js`)
+- API: ONE router function (`api/[...slug].js`) dispatching to handlers in
+  `api/_lib/` — URLs are unchanged (`/api/registrants`, `/api/scan`, …), but
+  the deployment is only 2 serverless functions (router + Stripe webhook),
+  which keeps it under Vercel's Hobby-plan 12-function cap. To add a route:
+  drop a handler in `api/_lib/` and register it in the router's ROUTES map.
+- Payments: Stripe Checkout (`api/_lib/create-checkout-session.js`, `api/stripe-webhook.js`)
 - Data: Supabase project **yellow-kite**, table `public.registrants`
 - Organizer roster read/check-in: `api/registrants.js` (service role + passcode)
 
@@ -42,9 +47,287 @@ Redeploy after adding env vars so the functions pick them up.
    for the `checkout.session.completed` event; copy the signing secret into
    `STRIPE_WEBHOOK_SECRET`.
 
+## Ticketing (Phase A)
+
+Every paid registrant now gets a **real, scannable QR ticket** (an opaque
+128-bit token), shown on the confirmation screen and on a shareable ticket
+page at `/?ticket=<token>`. Door staff scan tickets with the iPad camera
+(Door view → **Scan tickets**), which checks people in atomically — the same
+ticket can never check in twice, even from two devices at once.
+
+### One-time setup
+
+> **Fresh Supabase project?** Run **`db/phase-0-bootstrap.sql`** first — it
+> creates the base tables (registrants, sponsors, lots, event_settings) with
+> the insert-only RLS policy for the publishable key. It's a guarded no-op on
+> a project that already has them, so when in doubt, run it. Full order:
+> phase-0 → phase-a → phase-b → phase-c → phase-d. If you see
+> `relation "registrants" does not exist`, you're either in the wrong
+> Supabase project or need this bootstrap.
+
+1. Run **`db/phase-a.sql`** in the Supabase SQL editor (Dashboard → SQL
+   Editor). It adds `ticket_token` / `checked_in_at` to `registrants`, makes
+   the Stripe webhook idempotent (unique `stripe_session_id`), creates the
+   `ticket_scans` audit log, and backfills tokens for existing registrants —
+   already-sold tickets become scannable immediately.
+2. Redeploy. That's it for QR ticketing — no new env vars needed.
+
+### How tickets flow
+
+| Path | Where the ticket is minted |
+|---|---|
+| Online (Stripe) | `api/stripe-webhook.js` mints on payment; the success page fetches it via `/api/ticket?session_id=…` |
+| Simulated checkout | minted in the browser, saved with the registrant |
+| Cash walk-in | minted in the browser, saved with the registrant |
+
+Scans hit `POST /api/scan` (organizer passcode required). Results —
+accepted / duplicate / invalid — are logged to `ticket_scans`.
+
+### Door iPad stations (Phase B)
+
+Two locked, single-purpose station modes, launched from the Door view (or by
+URL). Pin each iPad to Safari with iOS **Guided Access**; leaving a station
+requires the organizer passcode.
+
+- **`/?station=register`** — self-serve walk-in registration. Guests enter
+  name/phone/party and either pay by card (Stripe) or choose "pay at the
+  cashier", which creates a **Pending** registration with a QR ticket. The
+  cashier finds them in the Door view and taps **Mark paid**; the scan
+  station flashes "payment due" until then.
+- **`/?station=scan`** — fullscreen ticket scanner (armed once with the
+  organizer passcode). Accepted / duplicate / invalid flashes, typed-code
+  fallback, per-station check-in tally.
+
+**How check-in validates** (why nobody can check in as someone else):
+self-serve check-in requires possession of the ticket QR/code — an
+unguessable 128-bit token. There is no name search on any self-serve screen;
+name lookup exists only in the staff Door view behind the passcode. Every
+accept flashes name + party size for staff to eyeball, and every attempt is
+logged in `ticket_scans`.
+
+Run `db/phase-b.sql` once in the Supabase SQL editor (after `db/phase-a.sql`)
+— it adds sponsor packages/benefits/logo storage and the lots `sale_type`
+column used by the silent-auction filter.
+
+### Offline door mode (Phase C)
+
+The door keeps working when venue internet drops — the thing Cvent OnArrival
+can't do. Run `db/phase-c.sql` once (after phase-b), and open the Door view /
+stations **once while online** on each iPad; from then on:
+
+- The page itself loads offline (service-worker app shell), and the roster
+  lives in an on-device manifest (IndexedDB), refreshed on every load and
+  every 2 minutes at the scan station.
+- **Scans keep working offline**: validated against the manifest, queued,
+  and replayed through `/api/scan-batch` when connectivity returns.
+  Reconciliation is **first-scan-wins** — the server's atomic claim decides;
+  if two offline devices both accepted the same ticket, staff see a conflict
+  banner naming the guest (never a silent drop). Replays are idempotent
+  (per-op ids), so a retried sync can't double-count or misreport.
+- **Walk-ins keep working offline** (cash at the Door view, self-serve at the
+  registration station): saved locally with their QR ticket — scannable on
+  that device immediately — and upserted on the unique ticket token at sync,
+  so a replay can never create a duplicate.
+- Staff edits (check-ins, Mark paid, bidder #s) queue as idempotent patches.
+- The Door view shows an offline banner with the queued-op count, last sync
+  time, and a "Sync now" button; stations show a queued badge.
+- A ticket sold online *after* the last sync scans as "Not in the offline
+  roster — verify manually", and still reconciles to a real verdict later.
+- Offline unlock only accepts the passcode the device verified while online
+  (an unverified passcode can't arm a device that has no server to ask).
+- Scope: each device queues its own work; devices see each other's changes
+  once connectivity returns. Card payments require connectivity (Stripe).
+
+### White-label Event Setup (Phase D)
+
+The event's branding, copy, and pricing are **config, not code**. Open
+**`/?app=setup`** (also linked in the organizer nav), connect with the
+organizer passcode, and edit:
+
+- Event name, association name, short name (used in copy), tagline, date
+  label, venue, city
+- Ticket name + price, suggested donation amounts
+- Brand colors (primary, primary-dark, accent, background) with a live
+  preview — every page derives its full palette from these four
+- Logo upload (shows on the landing page, ticket pages, and organizer nav)
+
+Empty fields fall back to the built-in Boil on the Bend defaults, so nothing
+changes until you customize. Apple/Google Wallet passes pick up the event
+name, org name, and colors automatically. A new customer = run the SQL, set
+the env vars, fill in Event Setup — no code changes, no fork.
+
+Run `db/phase-d.sql` once in the Supabase SQL editor (after `db/phase-c.sql`).
+
+### Multi-event (Phase E)
+
+One deployment now serves **many events**, each with its own branding,
+pricing, roster, sponsors, packages, auction, and settings. An event is an
+`event_settings` row keyed by a URL slug:
+
+- **URLs select the event**: `/?event=<slug>` works on every page —
+  registration, stations (`/?event=<slug>&station=scan`), ticket pages,
+  and the organizer apps. **No parameter = the default event**, so existing
+  links keep working unchanged.
+- **Create and switch events** on the Event Setup screen (`/?app=setup`):
+  an Events card lists all events, creates new ones (slug + name + year),
+  switches between them, sets the default, and shows the shareable links.
+- Registrants, sponsors, packages, and lots are all scoped by `event_id`;
+  the API resolves the event per request from `?event=`. Ticket tokens stay
+  globally unique, so a single scan station could even check in tickets
+  across events.
+- Wallet passes brand themselves from the registrant's own event.
+- Run `db/phase-e.sql` once (after `db/phase-d.sql`) — it backfills all
+  existing data to the `boil85` event and marks it the default, so the
+  current site is unchanged.
+
+### Per-event organizer passcodes (Phase F)
+
+Each event can have **its own organizer passcode**, so a chapter's door staff
+only reach that chapter's data:
+
+- The env var `ORGANIZER_PASSCODE` is the **master key** — it works for every
+  event and is the only key that can list events, create events, change the
+  default, or set a per-event passcode. That's you, the platform owner.
+- On the Event Setup screen (`/?app=setup`), select an event and set its
+  **"Organizer passcode for this event."** Hand that to the chapter's staff —
+  it unlocks only that event's roster, door, stations, sponsors, and auction.
+- Events with no passcode fall back to the master key, so nothing changes
+  until you set one.
+- The passcode is write-only: it's never returned by any API (the event list
+  shows only whether one is set), and every organizer endpoint authorizes
+  against the master key or the requested event's own passcode.
+- Run `db/phase-f.sql` once (after `db/phase-e.sql`).
+
+### Marketing site + demo booking (Phase L)
+
+The product's own homepage lives at **`/?app=home`** — a marketing landing
+page (positioning, features, pricing teaser) with a **"Book a demo"** form.
+Submissions are stored as leads; you see and manage the pipeline (new →
+contacted → booked → won/lost) in **Platform Admin → Demo requests**.
+
+- The public form POSTs to `/api/leads` (no auth); reading the pipeline is
+  platform-admin only.
+- Change the product name in one line: `const BRAND = "…"` at the top of
+  `src/Marketing.jsx`.
+- Run `db/phase-l.sql` (after `db/phase-k.sql`) — adds the `leads` table
+  (anon may insert only).
+- When you register a product domain, point it at `/?app=home` (or split it
+  into its own deployment later).
+
+### Capability-based access + RLS lockdown (Phase K, hardening)
+
+Access is now **least-privilege by capability**, not all-or-nothing. Three
+levels, and each endpoint requires the right one:
+
+| Level | Can do | Granted to |
+|---|---|---|
+| **checkin** | scan tickets, read the roster, toggle check-in | event door passcode; `door`-role member |
+| **manage** | edit roster / sponsors / lots / settlement / branding, mark paid, delete | org owner passcode; `owner`/`admin`/`staff` member |
+| **platform** | manage organizations, billing, payouts, create events, set defaults | master passcode; platform admin |
+
+So a **door passcode can only check people in** — it can no longer reach
+settlement, delete registrants, or manage sponsors. Higher levels include
+lower ones. Verified with a full capability-matrix test.
+
+`db/phase-k.sql` (after `db/phase-j.sql`) is a defense-in-depth **RLS
+lockdown**: it enables Row-Level Security on every tenant table so the
+browser publishable key can do nothing but insert a public registration, and
+prints any anon policy that grants more (should be none). The service role
+used by `/api/*` bypasses RLS and is unaffected.
+
+### Real logins + team invites (Phase J, additive)
+
+Organizers can now sign in with a real account (Supabase Auth **magic link** —
+passwordless) instead of sharing a passcode, and invite teammates by email
+with a role. **Passcodes still work** — login is an additional path, not a
+replacement, so nothing breaks.
+
+- A user belongs to organizations through `memberships` (roles: **owner /
+  admin / staff / door**). **Platform admins** are owners of the seeded
+  `house` org.
+- Every organizer API accepts **either** the `x-organizer-key` passcode
+  **or** an `Authorization: Bearer <supabase token>` from a signed-in user
+  whose membership authorizes the action. Cross-org access is denied.
+- **Invite a teammate** from Platform Admin → an org's **Team** section:
+  enter their email + role; they get a magic-link invite; signing in and
+  accepting creates their membership. The invite link is also shown to copy.
+- Accept flow lives at `/?invite=<token>&client=<slug>`.
+
+Setup:
+1. Run `db/phase-j.sql` (after `db/phase-i.sql`) — adds `memberships` +
+   `invitations`.
+2. In Supabase → **Authentication**: ensure Email is enabled (magic link).
+   For production email volume, configure SMTP (Supabase's default sender is
+   rate-limited).
+3. Make yourself a **platform admin**: sign in once, then insert a membership
+   row — `insert into memberships (user_id, org_id, role) select (select id
+   from auth.users where email='you@example.com'), (select id from
+   organizations where slug='house'), 'owner';` — after which you can manage
+   everything by login instead of the master passcode.
+4. (Optional) set `SUPABASE_ANON_KEY` in Vercel; otherwise the service key is
+   used to validate tokens.
+
+### Stripe Connect payouts + Billing (Phase I, env-gated)
+
+Two independent money flows, both managed per client organization on the
+**Platform Admin** screen (`/?app=platform`):
+
+- **Payouts (Stripe Connect Express)** — the platform collects each org's
+  ticket/auction money, keeps your platform fee, and pays out the rest to the
+  org's own connected account. Click **"Set up payouts"** on an org → Stripe's
+  onboarding runs (they verify identity) → once ready, registration checkouts
+  for that org's events become **destination charges** with your fee taken
+  automatically.
+- **Subscription (Stripe Billing)** — your flat platform fee to the org.
+  Click **"Start subscription"** → Stripe Checkout in subscription mode.
+
+Run `db/phase-i.sql` once (after `db/phase-h.sql`). Then in Vercel:
+
+| Variable | For | Value |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | both | your **platform** account secret (already set for checkout); enable **Connect** on this account in the Stripe dashboard |
+| `PLATFORM_FEE_PCT` | payouts | default platform fee fraction, e.g. `0.05` for 5% (per-org override lives on the org row) |
+| `PLATFORM_FEE_FLAT_CENTS` | payouts | optional flat per-charge fee in cents, e.g. `100` |
+| `STRIPE_PRICE_ID` | billing | the recurring Price id for your plan (create it in Stripe → Products) |
+| `PUBLIC_BASE_URL` | both | your deployed URL (already set) |
+
+Until these exist the buttons return a friendly "not configured" message and
+all checkouts stay on the platform account — nothing else changes.
+
+### Wallet passes (optional, env-gated)
+
+The **Add to Apple Wallet / Google Wallet** buttons appear automatically once
+the credentials below exist; until then the endpoints return 503 and the
+buttons stay hidden. QR ticketing works fully without them.
+
+**Apple** (`api/wallet-pass.js`) — requires an Apple Developer account:
+
+| Variable | Value |
+|---|---|
+| `APPLE_PASS_TYPE_ID` | e.g. `pass.com.ewala.boilonthebend` (Identifiers → Pass Type IDs) |
+| `APPLE_TEAM_ID` | 10-character Team ID |
+| `APPLE_PASS_CERT` | base64 of the pass certificate PEM |
+| `APPLE_PASS_KEY` | base64 of its private key PEM |
+| `APPLE_PASS_KEY_PASSPHRASE` | key passphrase (only if set) |
+| `APPLE_WWDR_CERT` | base64 of [Apple WWDR G4 cert](https://www.apple.com/certificateauthority/) PEM |
+| `APPLE_PASS_ICON_BASE64` | *(optional)* base64 PNG logo for the pass |
+
+**Google** (`api/google-wallet.js`) — requires a
+[Google Wallet issuer account](https://pay.google.com/business/console):
+
+| Variable | Value |
+|---|---|
+| `GOOGLE_WALLET_ISSUER_ID` | numeric issuer id |
+| `GOOGLE_WALLET_SA_EMAIL` | service account email (Wallet Object Issuer role) |
+| `GOOGLE_WALLET_SA_KEY` | base64 of the service account private key PEM |
+
+`base64` a PEM with: `base64 -w0 cert.pem` (macOS: `base64 -i cert.pem`).
+
 ## Notes
 - The Supabase **publishable** key in the frontend is insert-only via RLS — it
   cannot read the attendee list. Roster reads go through `/api/registrants`,
   protected by `ORGANIZER_PASSCODE` and the service-role key (server-only).
+- Ticket lookups (`/api/ticket`, wallet endpoints) authenticate by the token
+  itself — an unguessable 128-bit id — and return only what a ticket displays.
 - `npm run dev` runs the frontend locally; the `/api` functions run on Vercel
   (or via `vercel dev`).
