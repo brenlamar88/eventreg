@@ -49,6 +49,49 @@ export default async function handler(req, res) {
       return res.status(r.ok ? 200 : 500).json(rows);
     }
 
+    if (req.method === "POST") {
+      const eventId = requestedEvent(req);
+      const { bidder_number: _ignored, ...body } = req.body || {};
+      if (!body.name) return res.status(400).json({ error: "Missing name" });
+
+      // Atomically assign the next bidder number: fetch current max, try to
+      // insert, retry up to 10 times if the unique constraint fires (concurrent
+      // insert grabbed the same number between our read and write).
+      let inserted = null;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const maxR = await fetch(
+          `${base}?event_id=eq.${encodeURIComponent(eventId)}&select=bidder_number&order=created_at.desc`,
+          { headers }
+        );
+        const allRows = maxR.ok ? await maxR.json() : [];
+        const nums = allRows
+          .map((r) => parseInt(r.bidder_number || "0", 10))
+          .filter((n) => !isNaN(n) && n > 0);
+        const nextNum = String((nums.length ? Math.max(...nums) : 0) + 1);
+
+        const row = { event_id: eventId, bidder_number: nextNum, ...body };
+        const ins = await fetch(`${base}?select=*`, {
+          method: "POST",
+          headers: { ...headers, Prefer: "return=representation" },
+          body: JSON.stringify(row),
+        });
+        if (ins.ok) {
+          const rows = await ins.json();
+          inserted = Array.isArray(rows) ? rows[0] : rows;
+          break;
+        }
+        const errText = await ins.text();
+        // 23505 = unique_violation — another insert grabbed this number; retry
+        if (!errText.includes("23505")) {
+          return res.status(500).json({ error: "Insert failed", detail: errText });
+        }
+        // brief jitter before retry
+        await new Promise((r) => setTimeout(r, 20 + Math.random() * 80));
+      }
+      if (!inserted) return res.status(409).json({ error: "Could not assign a unique bidder number after retries" });
+      return res.status(201).json(inserted);
+    }
+
     if (req.method === "PATCH") {
       const { id, checked_in, bidder_number, phone, sponsor_id, ...rest } = req.body || {};
       if (!id) return res.status(400).json({ error: "Missing id" });
@@ -78,7 +121,7 @@ export default async function handler(req, res) {
       return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
     }
 
-    res.setHeader("Allow", "GET, PATCH, DELETE");
+    res.setHeader("Allow", "GET, POST, PATCH, DELETE");
     return res.status(405).json({ error: "Method not allowed" });
   } catch (err) {
     console.error("registrants error:", err);

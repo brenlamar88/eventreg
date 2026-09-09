@@ -1172,18 +1172,30 @@ export default function BoilOnTheBend() {
     if (!firstName.trim() || !lastName.trim()) { setPreRegMsg("First and last name are required."); return; }
     setPreRegLoading(true); setPreRegMsg("");
     try {
-      const bidderNo = String(await nextBidderNumber());
-      const row = {
+      // POST to server — bidder number is assigned atomically server-side
+      const body = {
         name: `${firstName} ${lastName}`.trim(), email: email.trim() || null,
         phone: phone.trim() || null, ranch: ranch.trim() || null,
         party: Number(party) || 1, source: "Pre-registered", status,
-        amount: Number(amount) || 0, bidder_number: bidderNo,
-        sponsor_id: sponsorId || null,
+        amount: Number(amount) || 0, sponsor_id: sponsorId || null,
       };
-      await dbInsert(row);
-      setRoster((r) => [{ ...row, checkedIn: false, date: new Date().toISOString().slice(0, 10), bidderNumber: bidderNo, sponsorId: row.sponsor_id, sponsorName: sponsors.find((s) => s.id === row.sponsor_id)?.name || null }, ...r]);
+      const r = await fetchT(withEvent(ROSTER_ENDPOINT), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-organizer-key": passcode },
+        body: JSON.stringify(body),
+      }, 10000);
+      if (!r.ok) throw new Error(`Server error ${r.status}`);
+      const inserted = await r.json();
+      const bidderNo = inserted.bidder_number || "";
+      setRoster((prev) => [{
+        ...inserted, checkedIn: !!inserted.checked_in,
+        date: (inserted.created_at || new Date().toISOString()).slice(0, 10),
+        bidderNumber: bidderNo,
+        sponsorId: inserted.sponsor_id || null,
+        sponsorName: sponsors.find((s) => s.id === inserted.sponsor_id)?.name || null,
+      }, ...prev]);
       setPreReg({ firstName: "", lastName: "", email: "", phone: "", ranch: "", party: 1, amount: 85, sponsorId: "", status: "Paid" });
-      setPreRegMsg(`Added ${row.name} (Bidder #${bidderNo})`);
+      setPreRegMsg(`Added ${inserted.name} (Bidder #${bidderNo})`);
     } catch (err) { setPreRegMsg("Error: " + err.message); }
     setPreRegLoading(false);
   };
