@@ -125,6 +125,11 @@ export async function authorizeOrganizerKey(req, key, opts) {
 //   authorizeOrganizer(req, { masterOnly:true })     → platform only
 export async function authorizeOrganizer(req, opts) {
   const need = required(opts);
-  if ((await keyLevel(req, req.headers["x-organizer-key"])) >= need) return true;
+  const key = req.headers["x-organizer-key"];
+  const kl = await keyLevel(req, key);
+  const eventId = (await import("./event.js").then(m => m.requestedEvent))(req);
+  const creds = await eventCreds(eventId, Date.now());
+  console.log("[auth]", { eventId, hasMaster: !!MASTER, hasSbKey: !!KEY, kl, need, credEvent: creds?.event, credOrg: creds?.org });
+  if (kl >= need) return true;
   return (await sessionLevel(req)) >= need;
 }
