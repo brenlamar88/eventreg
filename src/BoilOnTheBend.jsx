@@ -1586,7 +1586,7 @@ export default function BoilOnTheBend() {
             <Database size={17} color="var(--pine)" />
             <span className="dot" style={{ background: dotColor }} />
             <span style={{ fontSize: 13, fontWeight: 600 }}>{dbState === "live" ? "Connected" : dbState === "offline" ? "Offline (local)" : "Not loaded"}</span>
-            <input className="inp pwd" type="password" placeholder="Organizer passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} />
+            <input className="inp pwd" type="password" placeholder="Organizer passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} onInput={(e) => setPasscode(e.target.value)} />
             <button className="btn btn-p" style={{ padding: "11px 18px" }} onClick={loadRoster} disabled={dbState === "loading"}>
               <RefreshCw size={15} /> {dbState === "loading" ? "Loading…" : "Load roster"}
             </button>
