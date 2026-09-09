@@ -88,7 +88,7 @@ async function keyLevel(req, key) {
   }
   const { event, org } = await eventCreds(requestedEvent(req), now);
   if (org && key === org) lvl = Math.max(lvl, LEVELS.manage);   // event's org owner passcode
-  if (event && key === event) lvl = Math.max(lvl, LEVELS.checkin); // event door passcode
+  if (event && key === event) lvl = Math.max(lvl, LEVELS.manage); // event organizer passcode
   return lvl;
 }
 
