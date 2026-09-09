@@ -1628,11 +1628,22 @@ export default function BoilOnTheBend() {
           </div>
 
           <div className="importbox">
-            <div style={{ display: "flex", alignItems: "center", gap: 9, fontWeight: 700, fontSize: 15, marginBottom: 4 }}><Upload size={17} color="var(--pine)" /> Import prior registrants from Jotform</div>
-            <p style={{ fontSize: 13, color: "var(--inkSoft)", margin: "0 0 12px" }}>Paste your Jotform export (CSV with a header row, or a JSON array). Matching rows are written to Supabase.</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, fontWeight: 700, fontSize: 15, marginBottom: 4 }}><Upload size={17} color="var(--pine)" /> Import prior registrants</div>
+            <p style={{ fontSize: 13, color: "var(--inkSoft)", margin: "0 0 12px" }}>Upload a CSV file or paste CSV / JSON directly. Rows are matched and written to Supabase.</p>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", fontWeight: 700, fontSize: 13, padding: "9px 16px", borderRadius: 9, cursor: "pointer", border: "1.5px solid var(--pine)", background: "transparent", color: "var(--pine)", marginBottom: 12 }}>
+              <Upload size={15} /> Choose CSV file
+              <input type="file" accept=".csv,.json" style={{ display: "none" }} onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => setImportText(ev.target.result || "");
+                reader.readAsText(file);
+                e.target.value = "";
+              }} />
+            </label>
             <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder={'First Name,Last Name,Email,Phone Number,Quantity\nJohn,Boudreaux,john@example.com,(337) 555-0199,2'} />
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 12 }}>
-              <button className="btn btn-p" onClick={runImport}><Upload size={16} /> Import</button>
+              <button className="btn btn-p" onClick={runImport} disabled={!importText.trim()}><Upload size={16} /> Import</button>
               {importMsg && <span style={{ fontSize: 13, color: "var(--ok)", fontWeight: 600 }}>{importMsg}</span>}
             </div>
           </div>
