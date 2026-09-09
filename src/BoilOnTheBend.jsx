@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Calendar, MapPin, Check, ChevronRight, ChevronLeft, Users, Plus, Minus,
   ShieldCheck, Lock, Trash2, UserPlus, Search, CheckCircle2, Circle,
@@ -859,6 +859,7 @@ export default function BoilOnTheBend() {
   const [importText, setImportText] = useState("");
   const [importMsg, setImportMsg] = useState("");
   const [passcode, setPasscode] = useState(getAdminKey());
+  const passcodeRef = useRef(null);
   const [dbState, setDbState] = useState("idle"); // idle | loading | live | offline
   const [dbMsg, setDbMsg] = useState("");
 
@@ -1054,6 +1055,11 @@ export default function BoilOnTheBend() {
 
   /* ---- DB-backed roster ---- */
   const loadRoster = async (pc = passcode) => {
+    // Some password managers bypass all DOM events; read the DOM value directly
+    // as a fallback so autofill always lands even if React state stayed stale.
+    const domVal = passcodeRef.current?.value?.trim();
+    if (domVal && !pc) pc = domVal;
+    if (domVal && domVal !== passcode) { setPasscode(domVal); pc = domVal; }
     setDbState("loading"); setDbMsg("");
     try {
       const r = await fetchT(withEvent(ROSTER_ENDPOINT), { headers: { "x-organizer-key": pc } }, 10000);
@@ -1586,7 +1592,7 @@ export default function BoilOnTheBend() {
             <Database size={17} color="var(--pine)" />
             <span className="dot" style={{ background: dotColor }} />
             <span style={{ fontSize: 13, fontWeight: 600 }}>{dbState === "live" ? "Connected" : dbState === "offline" ? "Offline (local)" : "Not loaded"}</span>
-            <input className="inp pwd" type="password" placeholder="Organizer passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} onInput={(e) => setPasscode(e.target.value)} />
+            <input ref={passcodeRef} className="inp pwd" type="password" placeholder="Organizer passcode" value={passcode} onChange={(e) => setPasscode(e.target.value)} onInput={(e) => setPasscode(e.target.value)} />
             <button className="btn btn-p" style={{ padding: "11px 18px" }} onClick={loadRoster} disabled={dbState === "loading"}>
               <RefreshCw size={15} /> {dbState === "loading" ? "Loading…" : "Load roster"}
             </button>
