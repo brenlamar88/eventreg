@@ -54,19 +54,38 @@ const CARD_CSS =
   .bp-name { font-weight: 700; line-height: 1.02; letter-spacing: -0.01em; }
   .bp-org { font-size: 12pt; margin-top: 0.07in; }
   .bp-bidder { font-size: 10.5pt; margin-top: 0.12in; letter-spacing: 0.08em; }
-  .bp-bidder b { font-size: 15pt; }`;
+  .bp-bidder b { font-size: 15pt; }
+  .bp-logo { max-height: 0.85in; max-width: 92%; width: auto; object-fit: contain; margin-bottom: 0.09in; }`;
 
 function cardHtml(person, cfg, npt) {
   const name = esc(person.name || "Guest");
   const org = esc(person.ranch || person.sponsorName || "");
   const bidder = esc(person.bidderNumber || "");
   const event = esc(cfg.eventName || "");
+  // Prefer the event logo at the top; fall back to the event name in text.
+  const header = cfg.logoUrl
+    ? `<img class="bp-logo" src="${esc(cfg.logoUrl)}" alt="" />`
+    : event ? `<div class="bp-event">${event}</div>` : "";
   return `<div class="bp-card">
-      ${event ? `<div class="bp-event">${event}</div>` : ""}
+      ${header}
       <div class="bp-name" style="font-size:${npt}pt">${name}</div>
       ${org ? `<div class="bp-org">${org}</div>` : ""}
       ${bidder ? `<div class="bp-bidder">BIDDER <b>#${bidder}</b></div>` : ""}
     </div>`;
+}
+
+// Wait for the logo image to load before opening the print dialog, so it's
+// actually rendered in the printout (with a short fallback timeout).
+function whenReady(cfg, cb) {
+  if (!cfg.logoUrl) return cb();
+  let done = false;
+  const finish = () => { if (!done) { done = true; cb(); } };
+  const img = new Image();
+  img.onload = finish;
+  img.onerror = finish;
+  img.src = cfg.logoUrl;
+  if (img.complete) finish();
+  setTimeout(finish, 2500);
 }
 
 // Shrink a headline for a smaller cell so long names don't overflow.
@@ -98,8 +117,8 @@ export function printBadge(person, sizeKey = getBadgeSize()) {
       ${CARD_CSS}
     }`;
 
-  // Let the style/markup apply, then open the print sheet.
-  setTimeout(() => { try { window.print(); } catch { /* no-op */ } }, 60);
+  // Wait for the logo (if any) to load, then open the print sheet.
+  whenReady(cfg, () => setTimeout(() => { try { window.print(); } catch { /* no-op */ } }, 60));
 }
 
 // Letter-size sheets of badges, N per page, for pre-printing at a badge table.
@@ -138,7 +157,8 @@ export function printBadgeSheet(people, sheetKey = "6up") {
       .bp-page:last-child { break-after: auto; }
       .bp-cell { border: 1px dashed #cfcfcf; display: flex; align-items: center; justify-content: center; overflow: hidden; break-inside: avoid; }
       ${CARD_CSS}
+      .bp-logo { max-height: 0.6in; }
     }`;
 
-  setTimeout(() => { try { window.print(); } catch { /* no-op */ } }, 80);
+  whenReady(cfg, () => setTimeout(() => { try { window.print(); } catch { /* no-op */ } }, 80));
 }
