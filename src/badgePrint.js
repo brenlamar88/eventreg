@@ -10,17 +10,21 @@ import { getEventConfig } from "./eventConfig.js";
 
 // Common badge / label media. Values feed the CSS @page size.
 export const BADGE_SIZES = {
+  "4x6":      { w: "4in",   h: "6in",    label: 'Thermal label — 4 × 6" (PL50E)' },
   "4x3":      { w: "4in",   h: "3in",    label: 'Name badge — 4 × 3"' },
   "3.5x2.25": { w: "3.5in", h: "2.25in", label: 'Badge — 3.5 × 2.25"' },
   "brother62":{ w: "2.4in", h: "3.9in",  label: "Brother DK 62 mm" },
   "4x2":      { w: "4in",   h: "2in",    label: 'Label — 4 × 2"' },
 };
 
-const SIZE_KEY = "badge-size", AUTO_KEY = "badge-autoprint";
+const SIZE_KEY = "badge-size", AUTO_KEY = "badge-autoprint", AUTO_SIGNUP_KEY = "badge-autoprint-signup";
 export const getBadgeSize = () => { try { return localStorage.getItem(SIZE_KEY) || "4x3"; } catch { return "4x3"; } };
 export const setBadgeSize = (v) => { try { localStorage.setItem(SIZE_KEY, v); } catch { /* private mode */ } };
 export const getAutoPrint = () => { try { return localStorage.getItem(AUTO_KEY) === "1"; } catch { return false; } };
 export const setAutoPrint = (on) => { try { localStorage.setItem(AUTO_KEY, on ? "1" : "0"); } catch { /* private mode */ } };
+// Separate toggle for the sign-up / pre-reg flow (organizer admin view)
+export const getAutoSignupPrint = () => { try { return localStorage.getItem(AUTO_SIGNUP_KEY) === "1"; } catch { return false; } };
+export const setAutoSignupPrint = (on) => { try { localStorage.setItem(AUTO_SIGNUP_KEY, on ? "1" : "0"); } catch { /* private mode */ } };
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 

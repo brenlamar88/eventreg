@@ -13,7 +13,7 @@ import {
   queueOp, pendingCount, getMeta, fetchT, flushOutbox,
 } from "./offline.js";
 import { getEventConfig, withEvent, eventLink, getAdminKey, setAdminKey } from "./eventConfig.js";
-import { printBadge, printBadgeSheet, getAutoPrint, setAutoPrint, getBadgeSize, setBadgeSize, BADGE_SIZES, BADGE_SHEETS } from "./badgePrint.js";
+import { printBadge, printBadgeSheet, getAutoPrint, setAutoPrint, getAutoSignupPrint, setAutoSignupPrint, getBadgeSize, setBadgeSize, BADGE_SIZES, BADGE_SHEETS } from "./badgePrint.js";
 
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const IS_DEMO = URL_PARAMS.get("demo") === "true";
@@ -903,6 +903,7 @@ export default function BoilOnTheBend() {
   const [doorSearch, setDoorSearch] = useState("");
   const [doorFlash, setDoorFlash] = useState(null);
   const [autoPrint, setAP] = useState(getAutoPrint());
+  const [autoSignupPrint, setASP] = useState(getAutoSignupPrint());
   const [badgeSize, setBS] = useState(getBadgeSize());
   const [sheetKey, setSheetKey] = useState("6up");
   const [walkInForm, setWalkInForm] = useState({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: "cash" });
@@ -1196,6 +1197,7 @@ export default function BoilOnTheBend() {
       }, ...prev]);
       setPreReg({ firstName: "", lastName: "", email: "", phone: "", ranch: "", party: 1, amount: 85, sponsorId: "", status: "Paid" });
       setPreRegMsg(`Added ${inserted.name} (Bidder #${bidderNo})`);
+      if (autoSignupPrint) printBadge({ name: inserted.name, ranch: inserted.ranch, bidderNumber: bidderNo, sponsorName: sponsors.find((s) => s.id === inserted.sponsor_id)?.name || null }, badgeSize);
     } catch (err) { setPreRegMsg("Error: " + err.message); }
     setPreRegLoading(false);
   };
@@ -1621,7 +1623,18 @@ export default function BoilOnTheBend() {
           <div className="importbox" style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showPreReg ? 16 : 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 9, fontWeight: 700, fontSize: 15 }}><UserPlus size={17} color="var(--pine)" /> Add pre-registered attendee</div>
-              <button className="org-btn" style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 13, padding: "7px 14px", borderRadius: 9, cursor: "pointer", border: "1.5px solid var(--pine)", background: showPreReg ? "var(--pine)" : "transparent", color: showPreReg ? "#fff" : "var(--pine)" }} onClick={() => { setShowPreReg((v) => !v); setPreRegMsg(""); }}>{showPreReg ? "Cancel" : "Add attendee"}</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--inkSoft)", cursor: "pointer", userSelect: "none" }}>
+                  <input type="checkbox" checked={autoSignupPrint} onChange={(e) => { setASP(e.target.checked); setAutoSignupPrint(e.target.checked); }} />
+                  <Printer size={13} /> Auto-print label
+                </label>
+                {autoSignupPrint && (
+                  <select value={badgeSize} onChange={(e) => { setBS(e.target.value); setBadgeSize(e.target.value); }} style={{ fontFamily: "inherit", fontSize: 12, padding: "4px 7px", border: "1.5px solid var(--line)", borderRadius: 7 }}>
+                    {Object.entries(BADGE_SIZES).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+                  </select>
+                )}
+                <button className="org-btn" style={{ fontFamily: "inherit", fontWeight: 700, fontSize: 13, padding: "7px 14px", borderRadius: 9, cursor: "pointer", border: "1.5px solid var(--pine)", background: showPreReg ? "var(--pine)" : "transparent", color: showPreReg ? "#fff" : "var(--pine)" }} onClick={() => { setShowPreReg((v) => !v); setPreRegMsg(""); }}>{showPreReg ? "Cancel" : "Add attendee"}</button>
+              </div>
             </div>
             {showPreReg && (
               <div>
