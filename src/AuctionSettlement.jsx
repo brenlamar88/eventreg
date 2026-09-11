@@ -120,7 +120,8 @@ const Styles = () => (
     @media(max-width:760px){.span2,.span3,.span4,.span6{grid-column:span 6;}}
     .chkrow{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#4a463d;}
     .hint{font-size:12px;color:var(--inkSoft);margin-top:10px;display:flex;align-items:center;gap:7px;}
-    .tbl{width:100%;border-collapse:collapse;background:var(--paper);border:1.5px solid var(--line);border-radius:13px;overflow:hidden;font-size:13px;}
+    .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1.5px solid var(--line);border-radius:13px;}
+    .tbl{width:100%;border-collapse:collapse;background:var(--paper);font-size:13px;}
     .tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--inkSoft);font-weight:700;padding:11px 12px;background:var(--bone2);border-bottom:1.5px solid var(--line);}
     .tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
     .tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
@@ -526,7 +527,7 @@ export default function AuctionSettlement() {
                 <button key={t} className="btn ghost" style={{fontSize:12.5,padding:"6px 14px",borderRadius:999,...(saleFilter === t ? {background:"var(--pine)",color:"#fff",borderColor:"var(--pine)"} : {})}} onClick={() => setSaleFilter(t)}>{t} ({saleCounts[t]})</button>
               ))}
             </div>
-            <table className="tbl">
+            <div className="tblwrap"><table className="tbl">
               <thead><tr><th>Lot</th><th>Description</th><th>Buyer</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th>Delivery</th><th>Check #</th><th>Date</th><th></th></tr></thead>
               <tbody>
                 {shownByConsignor.map((g) => (
@@ -593,7 +594,7 @@ export default function AuctionSettlement() {
                   </React.Fragment>
                 ))}
               </tbody>
-            </table>
+            </table></div>
             <div className="grand">
               <div><div className="l">Auction lot total</div><div className="n">{money(grand.lotTotal)}</div></div>
               <div><div className="l">Total lot fees</div><div className="n">{money(grand.fees)}</div></div>
@@ -657,7 +658,7 @@ export default function AuctionSettlement() {
                 </span>
                 <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>
               </div>
-              <table className="tbl">
+              <div className="tblwrap"><table className="tbl">
                 <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th></th></tr></thead>
                 <tbody>
                   {grandLots.map((l) => { const c = calc(l, eventFee); const bidderNo = findBidder(l.buyerName); const balanceDue = l.amount - (l.amountPaid || 0); return (
@@ -700,7 +701,7 @@ export default function AuctionSettlement() {
                     )}
                     </React.Fragment>); })}
                 </tbody>
-              </table>
+              </table></div>
               <div className="grand" style={{gridTemplateColumns:"repeat(3,1fr)"}}>
                 <div><div className="l">Grand Auction total</div><div className="n">{money(totSold)}</div></div>
                 <div><div className="l">Lots with buyer</div><div className="n">{withBuyer} / {grandLots.length}</div></div>
