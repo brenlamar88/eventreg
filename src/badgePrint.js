@@ -10,7 +10,8 @@ import { getEventConfig } from "./eventConfig.js";
 
 // Common badge / label media. Values feed the CSS @page size.
 export const BADGE_SIZES = {
-  "4x6":      { w: "4in",   h: "6in",    label: 'Thermal label — 4 × 6" (PL50E)' },
+  "4x6":      { w: "4in",   h: "6in",    label: 'Thermal label — 4 × 6"' },
+  "2x3":      { w: "2in",   h: "3in",    label: 'Thermal label — 2 × 3" (PL50E)' },
   "4x3":      { w: "4in",   h: "3in",    label: 'Name badge — 4 × 3"' },
   "3.5x2.25": { w: "3.5in", h: "2.25in", label: 'Badge — 3.5 × 2.25"' },
   "brother62":{ w: "2.4in", h: "3.9in",  label: "Brother DK 62 mm" },
