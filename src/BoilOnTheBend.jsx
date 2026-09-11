@@ -316,7 +316,9 @@ const Styles = () => (
     .rtools{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;}
     .searchbox{flex:1;min-width:200px;display:flex;align-items:center;gap:9px;background:#fff;border:1.5px solid var(--line);border-radius:11px;padding:10px 13px;}
     .searchbox input{border:none;outline:none;font-family:inherit;font-size:14px;flex:1;background:transparent;color:var(--ink);}
-    .tbl{width:100%;border-collapse:collapse;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;overflow:hidden;}
+    .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1.5px solid var(--line);border-radius:14px;}
+    .tbl{width:100%;border-collapse:collapse;background:var(--paper);}
+    .tbl th,.tbl td{white-space:nowrap;}
     .tbl th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--inkSoft);font-weight:700;padding:13px 14px;background:var(--bone2);border-bottom:1.5px solid var(--line);}
     .tbl td{padding:13px 14px;font-size:13.5px;border-bottom:1px solid var(--line);vertical-align:middle;}
     .tbl tr:last-child td{border-bottom:none;}
@@ -1709,7 +1711,7 @@ export default function BoilOnTheBend() {
             </button>
           </div>
 
-          <table className="tbl">
+          <div className="tblwrap"><table className="tbl">
             <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Sponsor</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th><th></th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
@@ -1766,7 +1768,7 @@ export default function BoilOnTheBend() {
               })}
               {filtered.length === 0 && <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div></AdminShell>
     );

@@ -126,7 +126,8 @@ const Styles = () => (
     .span2{grid-column:span 2;}.span3{grid-column:span 3;}.span4{grid-column:span 4;}.span6{grid-column:span 6;}.span12{grid-column:span 12;}
     @media(max-width:760px){.span2,.span3,.span4,.span6{grid-column:span 6;}}
     .hint{font-size:12px;color:var(--inkSoft);margin-top:10px;display:flex;align-items:center;gap:7px;}
-    .tbl{width:100%;border-collapse:collapse;background:var(--paper);border:1.5px solid var(--line);border-radius:13px;overflow:hidden;font-size:13px;}
+    .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1.5px solid var(--line);border-radius:13px;}
+    .tbl{width:100%;border-collapse:collapse;background:var(--paper);font-size:13px;}
     .tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--inkSoft);font-weight:700;padding:11px 12px;background:var(--bone2);border-bottom:1.5px solid var(--line);}
     .tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
     .tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
@@ -568,7 +569,7 @@ export default function Sponsorships() {
                 <span className="tier-chip" style={{ background: isPackage ? "#111114" : tierColor(tier) }}>{tier}</span>
                 <span style={{ fontSize: 13, color: "var(--inkSoft)" }}>{items.length} sponsor{items.length !== 1 ? "s" : ""} · {money0(items.reduce((a, s) => a + s.amountPledged, 0))} pledged</span>
               </div>
-              <table className="tbl">
+              <div className="tblwrap"><table className="tbl">
                 <thead>
                   <tr>
                     <th>Sponsor</th><th>Contact</th><th className="num">Pledged</th><th className="num">Paid</th><th className="num">Balance</th><th>Status</th><th>Logo</th><th></th>
@@ -687,7 +688,7 @@ export default function Sponsorships() {
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           ))}
 
