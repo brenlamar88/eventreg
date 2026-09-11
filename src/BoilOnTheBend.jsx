@@ -3,7 +3,7 @@ import {
   Calendar, MapPin, Check, ChevronRight, ChevronLeft, Users, Plus, Minus,
   ShieldCheck, Lock, Trash2, UserPlus, Search, CheckCircle2, Circle,
   Upload, Heart, LayoutGrid, Ticket, Database, RefreshCw, AlertTriangle,
-  ScanLine, CreditCard, FileText, Printer,
+  ScanLine, CreditCard, FileText, Printer, Pencil, X,
 } from "lucide-react";
 import TicketQR from "./TicketQR.jsx";
 import AdminShell from "./AdminShell.jsx";
@@ -898,6 +898,8 @@ export default function BoilOnTheBend() {
   const [autoPrint, setAP] = useState(getAutoPrint());
   const [badgeSize, setBS] = useState(getBadgeSize());
   const [sheetKey, setSheetKey] = useState("6up");
+  const [editId, setEditId] = useState(null);   // roster row being edited
+  const [editDraft, setEditDraft] = useState({});
   const [walkInForm, setWalkInForm] = useState({ firstName: "", lastName: "", ranch: "", phone: "", party: 1, payment: "cash" });
   const [walkInMsg, setWalkInMsg] = useState("");
   const [walkInLoading, setWalkInLoading] = useState(false);
@@ -1147,6 +1149,22 @@ export default function BoilOnTheBend() {
   const savePhone = async (person, value) => {
     setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, phone: value } : p)));
     await patchOrQueue(person, { phone: value || null });
+  };
+
+  const startRegEdit = (person) => {
+    const { first, last } = splitName(person.name);
+    setEditId(person.id);
+    setEditDraft({ first, last, ranch: person.ranch || "", email: person.email || "" });
+  };
+  const cancelRegEdit = () => { setEditId(null); setEditDraft({}); };
+  const saveRegEdit = async (person) => {
+    const name = `${(editDraft.first || "").trim()} ${(editDraft.last || "").trim()}`.trim();
+    if (!name) return; // don't allow blanking the name
+    const ranch = (editDraft.ranch || "").trim();
+    const email = (editDraft.email || "").trim();
+    setRoster((r) => r.map((p) => (p.id === person.id ? { ...p, name, ranch: ranch || null, email: email || null } : p)));
+    setEditId(null); setEditDraft({});
+    await patchOrQueue(person, { name, ranch: ranch || null, email: email || null });
   };
 
   const saveSponsor = async (person, sponsorId) => {
@@ -1596,7 +1614,7 @@ export default function BoilOnTheBend() {
           </div>
 
           <table className="tbl">
-            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Sponsor</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th><th></th></tr></thead>
+            <thead><tr><th>Bidder #</th><th>First Name</th><th>Last Name</th><th>Ranch / Company</th><th>Sponsor</th><th>Email</th><th>Phone</th><th>Party</th><th>Status</th><th>Check-in</th><th></th><th></th><th></th></tr></thead>
             <tbody>
               {filtered.map((p, i) => {
                 const { first, last } = splitName(p.name);
@@ -1605,9 +1623,19 @@ export default function BoilOnTheBend() {
                 return (
                   <tr key={p.id || i}>
                     <td><input style={{ fontFamily: "inherit", fontSize: 13, fontWeight: 700, width: 64, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, textAlign: "center" }} value={p.bidderNumber || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x) => x.id === p.id ? { ...x, bidderNumber: e.target.value } : x))} onBlur={(e) => saveBidderNumber(p, e.target.value)} /></td>
-                    <td style={{ fontWeight: 700 }}>{first}</td>
-                    <td style={{ fontWeight: 700 }}>{last}</td>
-                    <td style={{ color: "var(--inkSoft)" }}>{ranch}</td>
+                    {editId === p.id ? (
+                      <>
+                        <td><input style={inpStyle} value={editDraft.first || ""} placeholder="First" onChange={(e) => setEditDraft((d) => ({ ...d, first: e.target.value }))} /></td>
+                        <td><input style={inpStyle} value={editDraft.last || ""} placeholder="Last" onChange={(e) => setEditDraft((d) => ({ ...d, last: e.target.value }))} /></td>
+                        <td><input style={inpStyle} value={editDraft.ranch || ""} placeholder="Ranch / Company" onChange={(e) => setEditDraft((d) => ({ ...d, ranch: e.target.value }))} /></td>
+                      </>
+                    ) : (
+                      <>
+                        <td style={{ fontWeight: 700 }}>{first}</td>
+                        <td style={{ fontWeight: 700 }}>{last}</td>
+                        <td style={{ color: "var(--inkSoft)" }}>{ranch}</td>
+                      </>
+                    )}
                     <td>
                       <select style={{ fontFamily: "inherit", fontSize: 12.5, padding: "5px 7px", border: "1.5px solid var(--line)", borderRadius: 8, background: "#fff", color: "var(--ink)", minWidth: 130 }}
                         value={p.sponsorId || ""}
@@ -1616,17 +1644,31 @@ export default function BoilOnTheBend() {
                         {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </td>
-                    <td style={{ color: "var(--inkSoft)", fontSize: 12.5 }}>{p.email}</td>
+                    <td style={{ color: "var(--inkSoft)", fontSize: 12.5 }}>
+                      {editId === p.id
+                        ? <input style={inpStyle} value={editDraft.email || ""} placeholder="email" onChange={(e) => setEditDraft((d) => ({ ...d, email: e.target.value }))} />
+                        : p.email}
+                    </td>
                     <td><input style={inpStyle} value={p.phone || ""} placeholder="—" onChange={(e) => setRoster((r) => r.map((x) => x.id === p.id ? { ...x, phone: e.target.value } : x))} onBlur={(e) => savePhone(p, e.target.value)} /></td>
                     <td>{p.party || 1}</td>
                     <td><span className={`badge-s ${p.status === "Paid" ? "b-paid" : "b-pend"}`}>{p.status}</span></td>
                     <td><button className={`ci ${p.checkedIn ? "on" : ""}`} onClick={() => toggleCheckIn(p)}>{p.checkedIn ? <CheckCircle2 size={18} /> : <Circle size={18} />}{p.checkedIn ? "In" : "Check in"}</button></td>
+                    <td>
+                      {editId === p.id ? (
+                        <span style={{ display: "inline-flex", gap: 4 }}>
+                          <button className="ci" style={{ color: "var(--ok)" }} title="Save" onClick={() => saveRegEdit(p)}><Check size={16} /></button>
+                          <button className="ci" title="Cancel" onClick={cancelRegEdit}><X size={16} /></button>
+                        </span>
+                      ) : (
+                        <button className="ci" title="Edit name / details" onClick={() => startRegEdit(p)}><Pencil size={15} /></button>
+                      )}
+                    </td>
                     <td><button className="ci" title="Print name badge" onClick={() => printBadge(p, badgeSize)}><Printer size={16} /></button></td>
                     <td><button className="ci" style={{ color: "#b4471f" }} onClick={() => deleteRegistrant(p)}><Trash2 size={16} /></button></td>
                   </tr>
                 );
               })}
-              {filtered.length === 0 && <tr><td colSpan={11} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={13} style={{ textAlign: "center", color: "var(--inkSoft)", padding: 30 }}>No registrants match "{search}".</td></tr>}
             </tbody>
           </table>
         </div>
