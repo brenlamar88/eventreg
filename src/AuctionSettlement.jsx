@@ -227,7 +227,7 @@ export default function AuctionSettlement() {
     setMsg("Demo mode — sample data only. No real data is shown or saved.");
   }, []);
 
-  // Mark lot paid when Stripe redirects back with ?lot_paid=<id>
+  // Mark lot paid when the checkout redirects back with ?lot_paid=<id>
   useEffect(() => {
     if (IS_DEMO) return;
     const params = new URLSearchParams(window.location.search);
@@ -257,7 +257,7 @@ export default function AuctionSettlement() {
       });
       const data = await r.json();
       if (data.url) window.location.href = data.url;
-      else alert("Stripe error: " + (data.error || "Unknown error"));
+      else alert("Payment error: " + (data.error || "Unknown error"));
     } catch (err) {
       alert("Checkout failed: " + err.message);
     }
