@@ -8,9 +8,10 @@
 // functions total (this router + stripe-webhook) never hit the limit again,
 // on any plan.
 //
-// api/stripe-webhook.js stays a standalone function on purpose: Stripe
-// signature verification reads the raw request stream, and isolating it
-// keeps that path untouched by anything here.
+// api/stripe-webhook.js and api/square-webhook.js stay standalone functions on
+// purpose: each verifies a provider signature over the RAW request stream, and
+// isolating them keeps those paths untouched by anything here. (Stripe still
+// handles registration/ticket payments; Square handles auction lot payments.)
 //
 // Adding a route = add the handler in _lib and one line in ROUTES.
 // ---------------------------------------------------------------------------
