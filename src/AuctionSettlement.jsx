@@ -276,7 +276,9 @@ export default function AuctionSettlement() {
     const ranch = findRanch(name) || currentRanch;
     setLot(lotId, { buyerName: name, buyerRanch: ranch, buyer: name ? display(name, ranch) : "—" });
   };
-  const onNameChange = (which, v) => { const name = which === "buyer" ? parseBuyerInput(v) : v; setForm((p) => ({ ...p, [which + "Name"]: name, [which + "Ranch"]: findRanch(name) || p[which + "Ranch"] })); };
+  // Strip the "#405 - " bidder prefix for BOTH consignor and buyer when a name
+  // is picked from the datalist (free-typed names pass through unchanged).
+  const onNameChange = (which, v) => { const name = parseBuyerInput(v); setForm((p) => ({ ...p, [which + "Name"]: name, [which + "Ranch"]: findRanch(name) || p[which + "Ranch"] })); };
   const rememberPerson = (name, ranch) => { if (name) setPeople((prev) => prev.some((p) => p.name.toLowerCase() === name.toLowerCase()) ? prev : [...prev, { name, ranch: ranch || "" }]); };
 
   const saveLotEdit = async () => {
@@ -566,7 +568,7 @@ export default function AuctionSettlement() {
                               <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
                               <div className="f"><label>Category</label><select style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.category} disabled={editForm.donated} onChange={(e) => setEF("category", e.target.value)}>{CATEGORIES.map((cat) => <option key={cat}>{cat}</option>)}</select></div>
                               <div className="f"><label>Sale type</label><select style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.saleType} onChange={(e) => setEF("saleType", e.target.value)}>{["Live", "Silent"].map((t) => <option key={t}>{t}</option>)}</select></div>
-                              <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
+                              <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", parseBuyerInput(e.target.value))} /></div>
                               <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
                               <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => setEF("donated", e.target.checked)} /> 100% donation to {CFG.orgShort}</label></div>
                               {editForm.saleType === "Silent" && (
@@ -695,7 +697,7 @@ export default function AuctionSettlement() {
                           <div className="edit-grid">
                             <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
                             <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
-                            <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", e.target.value)} /></div>
+                            <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", parseBuyerInput(e.target.value))} /></div>
                             <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
                             <div className="f" style={{flexDirection:"row",gap:8,alignItems:"flex-end"}}>
                               <button className="btn" style={{fontSize:13,padding:"7px 14px"}} onClick={saveLotEdit}><Check size={14}/> Save</button>
