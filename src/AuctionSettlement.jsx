@@ -17,12 +17,15 @@ const CFG = getEventConfig();
    - Lot fee: a SINGLE event-wide value (default $50), stored in event_settings.
    - Net per lot = amount − commission − lot fee   (the check amount)
    - Donated lots (100% to EWA): no fee, no commission, net $0
+   - Grand Auction lots are commission-free (fee only) UNLESS they include an
+     animal sale — the per-lot "animal sale" checkbox turns the commission on.
    - Pay a consignor only AFTER the signed delivery form is received.
    ========================================================================== */
 function rateFor(amt) { if (amt >= 10000) return 0.09; if (amt > 5000) return 0.10; return 0.11; }
 function calc(lot, eventFee) {
   if (lot.donated) return { rate: 0, fee: 0, commission: 0, net: 0 };
-  if (lot.category === "Grand Auction") { const fee = Number(eventFee) || 0; return { rate: 0, fee, commission: 0, net: lot.amount - fee }; }
+  // Grand Auction is fee-only — except animal-sale lots, which owe commission.
+  if (lot.category === "Grand Auction" && !lot.animalSale) { const fee = Number(eventFee) || 0; return { rate: 0, fee, commission: 0, net: lot.amount - fee }; }
   const rate = rateFor(lot.amount);
   const commission = Math.round(lot.amount * rate * 100) / 100;
   const fee = Number(eventFee) || 0;
@@ -62,6 +65,7 @@ const dbLotToUI = (r) => ({
   consignor: display(r.consignor_name || "(unnamed)", r.consignor_ranch || ""),
   buyer: r.buyer_name ? display(r.buyer_name, r.buyer_ranch || "") : "—",
   amount: Number(r.amount) || 0, amountPaid: Number(r.amount_paid) || 0, donated: !!r.donated,
+  animalSale: !!r.animal_sale,
   delivered: !!r.delivered, checkNo: r.check_no || "", checkDate: r.check_date || "",
   buyerPaid: !!r.buyer_paid, paymentMethod: r.payment_method || "cash",
   // Silent-auction live bidding (phase-m)
@@ -406,6 +410,7 @@ export default function AuctionSettlement() {
       if ("amountPaid" in patch) dbPatch.amount_paid = patch.amountPaid;
       if ("buyerPaid" in patch) dbPatch.buyer_paid = patch.buyerPaid;
       if ("paymentMethod" in patch) dbPatch.payment_method = patch.paymentMethod;
+      if ("animalSale" in patch) dbPatch.animal_sale = patch.animalSale;
       try { await fetch(withEvent("/api/lots"), { method: "PATCH", headers: hdr(), body: JSON.stringify({ id, ...dbPatch }) }); } catch {}
     }
   };
@@ -659,7 +664,7 @@ export default function AuctionSettlement() {
                 <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>
               </div>
               <div className="tblwrap"><table className="tbl">
-                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th></th></tr></thead>
+                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th style={{textAlign:"center"}}>Animal</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th></th></tr></thead>
                 <tbody>
                   {grandLots.map((l) => { const c = calc(l, eventFee); const bidderNo = findBidder(l.buyerName); const balanceDue = l.amount - (l.amountPaid || 0); return (
                     <React.Fragment key={l.id}>
@@ -673,6 +678,7 @@ export default function AuctionSettlement() {
                       </td>
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td>
                       <td className="num">{money(c.fee)}</td>
+                      <td style={{textAlign:"center"}}><input type="checkbox" checked={!!l.animalSale} title="Includes an animal sale — apply commission" onChange={(e) => setLot(l.id, { animalSale: e.target.checked })} /></td>
                       <td className="num">{money(c.commission)}</td>
                       <td className="num net">{money(c.net)}</td>
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amountPaid === 0 ? "" : l.amountPaid} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amountPaid: Number(v) || 0 }); }} /></td>
@@ -685,7 +691,7 @@ export default function AuctionSettlement() {
                     </tr>
                     {editId === l.id && (
                       <tr className="edit-row">
-                        <td colSpan={12}>
+                        <td colSpan={13}>
                           <div className="edit-grid">
                             <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
                             <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>

@@ -48,6 +48,7 @@ export default async function handler(req, res) {
           buyer_ranch: b.buyerRanch || null,
           amount: b.amount || 0,
           donated: !!b.donated,
+          animal_sale: !!b.animalSale,
           lot_fee: b.lotFee ?? null,
           commission: b.commission || 0,
           net: b.net || 0,
