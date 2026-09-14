@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
   Check, DollarSign, FileText, Truck, Receipt, Landmark, Printer,
-  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download, Gavel,
+  CheckCircle2, Circle, Plus, Trash2, Users, Settings, Database, RefreshCw, AlertTriangle, Pencil, X, CreditCard, Download, Gavel, Gift,
 } from "lucide-react";
 import AdminShell from "./AdminShell.jsx";
 import { DEMO_LOTS, DEMO_PEOPLE, DEMO_REGISTRANTS, DEMO_SPONSORS, DEMO_LOT_FEE } from "./demoData.js";
@@ -475,6 +475,7 @@ export default function AuctionSettlement() {
         <div className="tabs">
           <TabBtn id="payments" icon={DollarSign}>Consignor Payment Detail</TabBtn>
           <TabBtn id="grand" icon={Receipt}>Grand Auction</TabBtn>
+          <TabBtn id="donated" icon={Gift}>Donated</TabBtn>
           <TabBtn id="consignor" icon={FileText}>Consignor Ledger</TabBtn>
           <TabBtn id="buyer" icon={Receipt}>Buyer Ledger</TabBtn>
           <TabBtn id="reports" icon={Download}>Reports</TabBtn>
@@ -714,6 +715,69 @@ export default function AuctionSettlement() {
                 <div><div className="l">Grand Auction total</div><div className="n">{money(totSold)}</div></div>
                 <div><div className="l">Lots with buyer</div><div className="n">{withBuyer} / {grandLots.length}</div></div>
                 <div><div className="l">Net to consignors</div><div className="n">{money(grandLots.reduce((a, l) => a + calc(l, eventFee).net, 0))}</div></div>
+              </div>
+            </>)}
+          </>);
+        })()}
+
+        {tab === "donated" && (() => {
+          const donatedLots = lots.filter((l) => l.donated || l.category === "Donated").sort((a, b) => Number(a.lotNo) - Number(b.lotNo) || String(a.lotNo).localeCompare(String(b.lotNo)));
+          const totVal = donatedLots.reduce((a, l) => a + (l.amount || 0), 0);
+          return (<>
+            <div className="bar" style={{justifyContent:"space-between"}}>
+              <span style={{fontSize:13,fontWeight:600,color:"var(--inkSoft)"}}>
+                {donatedLots.length} donated item{donatedLots.length === 1 ? "" : "s"} · 100% to {CFG.orgShort} · {money(totVal)} value
+              </span>
+              {donatedLots.length > 0 && <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>}
+            </div>
+            {donatedLots.length === 0 ? (
+              <div className="empty"><div className="big">No donated items</div>Items marked “100% donation” on the Payment Detail or Grand Auction tab show up here to view and remove.</div>
+            ) : (<>
+              <div className="tblwrap"><table className="tbl">
+                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Value</th><th></th></tr></thead>
+                <tbody>
+                  {donatedLots.map((l) => { const bidderNo = findBidder(l.buyerName); return (
+                    <React.Fragment key={l.id}>
+                    <tr>
+                      <td className="lot">{l.lotNo}</td>
+                      <td>{l.description || "—"}</td>
+                      <td style={{color:"var(--inkSoft)",fontSize:12.5}}>{l.consignorName || "—"}</td>
+                      <td>
+                        <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Enter buyer…" onChange={(e) => onBuyerChange(l.id, e.target.value, l.buyerRanch)} />
+                        {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
+                      </td>
+                      <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td>
+                      <td style={{whiteSpace:"nowrap"}}>
+                        <button className="edit-btn" title="Edit item" onClick={() => editId === l.id ? cancelEdit() : startEdit(l)}>{editId === l.id ? <X size={15}/> : <Pencil size={15}/>}</button>
+                        <button className="trash" title="Delete item" onClick={() => delLot(l.id)}><Trash2 size={15}/></button>
+                      </td>
+                    </tr>
+                    {editId === l.id && (
+                      <tr className="edit-row">
+                        <td colSpan={6}>
+                          <div className="edit-grid">
+                            <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
+                            <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
+                            <div className="f"><label>Consignor name</label><input list="people-list" style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorName} onChange={(e) => setEF("consignorName", parseBuyerInput(e.target.value))} /></div>
+                            <div className="f"><label>Ranch</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.consignorRanch} onChange={(e) => setEF("consignorRanch", e.target.value)} /></div>
+                            <div className="f" style={{gridColumn:"span 2"}}><label className="chkrow" style={{marginTop:20}}><input type="checkbox" checked={editForm.donated} onChange={(e) => { const on = e.target.checked; setEF("donated", on); if (!on && (editForm.category === "Donated" || !editForm.category)) setEF("category", CATEGORIES.find((c) => c !== "Donated")); }} /> Keep as 100% donation to {CFG.orgShort}</label></div>
+                            {!editForm.donated && (
+                              <div className="f"><label>Move to category</label><select style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.category === "Donated" ? "" : editForm.category} onChange={(e) => setEF("category", e.target.value)}>{CATEGORIES.filter((c) => c !== "Donated").map((cat) => <option key={cat}>{cat}</option>)}</select></div>
+                            )}
+                            <div className="f" style={{flexDirection:"row",gap:8,alignItems:"flex-end"}}>
+                              <button className="btn" style={{fontSize:13,padding:"7px 14px"}} onClick={saveLotEdit}><Check size={14}/> Save</button>
+                              <button className="btn ghost" style={{fontSize:13,padding:"7px 12px"}} onClick={cancelEdit}><X size={14}/> Cancel</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>); })}
+                </tbody>
+              </table></div>
+              <div className="grand" style={{gridTemplateColumns:"repeat(2,1fr)"}}>
+                <div><div className="l">Donated items</div><div className="n">{donatedLots.length}</div></div>
+                <div><div className="l">Total donation value</div><div className="n">{money(totVal)}</div></div>
               </div>
             </>)}
           </>);
