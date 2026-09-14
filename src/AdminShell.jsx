@@ -78,6 +78,12 @@ const Styles = () => (
       .ash-burger{background:none;border:none;color:#fff;cursor:pointer;padding:4px;}
       .ash-scrim{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:75;}
     }
+    @media print {
+      /* Keep the console chrome out of any printout / PDF — content only. */
+      .ash-side,.ash-topbar,.ash-scrim{display:none !important;}
+      .ash{display:block;background:#fff;}
+      .ash-main{flex:none;}
+    }
   `}</style>
 );
 
