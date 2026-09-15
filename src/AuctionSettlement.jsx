@@ -22,14 +22,20 @@ const CFG = getEventConfig();
    - Pay a consignor only AFTER the signed delivery form is received.
    ========================================================================== */
 function rateFor(amt) { if (amt >= 10000) return 0.09; if (amt > 5000) return 0.10; return 0.11; }
+// A lot's amount is the PER-UNIT price; the line total is amount × quantity.
+// Every monetary figure below (fee, commission, net) and every ledger total is
+// built from this, so quantity flows through everywhere. Missing/blank qty = 1.
+const qtyOf = (lot) => { const q = Number(lot.quantity); return q > 0 ? q : 1; };
+const lineTotal = (lot) => (Number(lot.amount) || 0) * qtyOf(lot);
 function calc(lot, eventFee) {
-  if (lot.donated) return { rate: 0, fee: 0, commission: 0, net: 0 };
-  // Grand Auction is fee-only — except animal-sale lots, which owe commission.
-  if (lot.category === "Grand Auction" && !lot.animalSale) { const fee = Number(eventFee) || 0; return { rate: 0, fee, commission: 0, net: lot.amount - fee }; }
-  const rate = rateFor(lot.amount);
-  const commission = Math.round(lot.amount * rate * 100) / 100;
+  const total = lineTotal(lot);
+  if (lot.donated) return { rate: 0, fee: 0, commission: 0, net: 0, total };
   const fee = Number(eventFee) || 0;
-  return { rate, fee, commission, net: lot.amount - commission - fee };
+  // Grand Auction is fee-only — except animal-sale lots, which owe commission.
+  if (lot.category === "Grand Auction" && !lot.animalSale) { return { rate: 0, fee, commission: 0, net: total - fee, total }; }
+  const rate = rateFor(total);
+  const commission = Math.round(total * rate * 100) / 100;
+  return { rate, fee, commission, net: total - commission - fee, total };
 }
 const money = (n) => "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const money0 = (n) => "$" + Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -64,7 +70,8 @@ const dbLotToUI = (r) => ({
   buyerName: r.buyer_name || "", buyerRanch: r.buyer_ranch || "",
   consignor: display(r.consignor_name || "(unnamed)", r.consignor_ranch || ""),
   buyer: r.buyer_name ? display(r.buyer_name, r.buyer_ranch || "") : "—",
-  amount: Number(r.amount) || 0, amountPaid: Number(r.amount_paid) || 0, donated: !!r.donated,
+  amount: Number(r.amount) || 0, quantity: r.quantity == null ? 1 : Number(r.quantity) || 1,
+  amountPaid: Number(r.amount_paid) || 0, donated: !!r.donated,
   animalSale: !!r.animal_sale,
   delivered: !!r.delivered, checkNo: r.check_no || "", checkDate: r.check_date || "",
   buyerPaid: !!r.buyer_paid, paymentMethod: r.payment_method || "cash",
@@ -120,8 +127,8 @@ const Styles = () => (
     .f label{font-size:11.5px;font-weight:600;color:#4a463d;}
     .f input,.f select{font-family:inherit;font-size:13.5px;padding:9px 11px;border:1.5px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);outline:none;width:100%;}
     .f input:focus,.f select:focus{border-color:var(--pine);}
-    .span2{grid-column:span 2;} .span3{grid-column:span 3;} .span4{grid-column:span 4;} .span6{grid-column:span 6;}
-    @media(max-width:760px){.span2,.span3,.span4,.span6{grid-column:span 6;}}
+    .span1{grid-column:span 1;} .span2{grid-column:span 2;} .span3{grid-column:span 3;} .span4{grid-column:span 4;} .span6{grid-column:span 6;}
+    @media(max-width:760px){.span2,.span3,.span4,.span6{grid-column:span 6;} .span1{grid-column:span 2;}}
     .chkrow{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#4a463d;}
     .hint{font-size:12px;color:var(--inkSoft);margin-top:10px;display:flex;align-items:center;gap:7px;}
     .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1.5px solid var(--line);border-radius:13px;}
@@ -143,6 +150,7 @@ const Styles = () => (
     .buyer-in{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none;width:160px;}
     .buyer-in:focus{border-color:var(--pine);}
     .amt-in{font-family:inherit;font-size:12.5px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none;width:90px;text-align:right;}
+    .qty-in{font-family:inherit;font-size:12.5px;padding:6px 6px;border:1.5px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);outline:none;width:52px;text-align:center;}
     .amt-in:focus{border-color:var(--pine);}
     .trash{background:none;border:none;cursor:pointer;color:#a23b1c;}
     .edit-btn{background:none;border:none;cursor:pointer;color:var(--inkSoft);padding:2px;}
@@ -202,7 +210,7 @@ export default function AuctionSettlement() {
   const [msg, setMsg] = useState("");
   const [regLoading, setRegLoading] = useState(false);
   const [xlsxLoading, setXlsxLoading] = useState(false);
-  const blankForm = { lotNo: "", description: "", category: "Elite Registry", saleType: "Live", consignorName: "", consignorRanch: "", buyerName: "", buyerRanch: "", amount: "", donated: false };
+  const blankForm = { lotNo: "", description: "", category: "Elite Registry", saleType: "Live", consignorName: "", consignorRanch: "", buyerName: "", buyerRanch: "", amount: "", quantity: "1", donated: false };
   const [form, setForm] = useState(blankForm);
   const [consignorSel, setConsignorSel] = useState("");
   const [buyerSel, setBuyerSel] = useState("");
@@ -350,7 +358,7 @@ export default function AuctionSettlement() {
       saleType: form.saleType || "Live",
       consignorName: form.consignorName.trim(), consignorRanch: form.consignorRanch.trim(),
       buyerName: form.buyerName.trim(), buyerRanch: form.buyerRanch.trim(),
-      amount: Number(form.amount) || 0, donated: form.donated,
+      amount: Number(form.amount) || 0, quantity: Math.max(1, Number(form.quantity) || 1), donated: form.donated,
     };
     const ui = {
       id: "tmp-" + Date.now(), ...base,
@@ -381,7 +389,7 @@ export default function AuctionSettlement() {
       lotNo: form.lotNo.trim(), description: form.description.trim(), category: "Grand Auction", saleType: "Live",
       consignorName: form.consignorName.trim(), consignorRanch: form.consignorRanch.trim(),
       buyerName: form.buyerName.trim(), buyerRanch: form.buyerRanch.trim(),
-      amount: Number(form.amount) || 0, donated: false,
+      amount: Number(form.amount) || 0, quantity: Math.max(1, Number(form.quantity) || 1), donated: false,
     };
     const ui = {
       id: "tmp-" + Date.now(), ...base,
@@ -413,6 +421,7 @@ export default function AuctionSettlement() {
       if ("buyerName" in patch) dbPatch.buyer_name = patch.buyerName || null;
       if ("buyerRanch" in patch) dbPatch.buyer_ranch = patch.buyerRanch || null;
       if ("amount" in patch) dbPatch.amount = patch.amount;
+      if ("quantity" in patch) dbPatch.quantity = patch.quantity;
       if ("amountPaid" in patch) dbPatch.amount_paid = patch.amountPaid;
       if ("buyerPaid" in patch) dbPatch.buyer_paid = patch.buyerPaid;
       if ("paymentMethod" in patch) dbPatch.payment_method = patch.paymentMethod;
@@ -425,18 +434,18 @@ export default function AuctionSettlement() {
     if (!IS_DEMO && connected && typeof id === "string" && !id.startsWith("tmp-")) { try { await fetch(withEvent(`/api/lots?id=${id}`), { method: "DELETE", headers: hdr() }); } catch {} }
   };
 
-  const grand = useMemo(() => lots.reduce((a, l) => { if (!l.donated) { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; } return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }), [lots, eventFee]);
+  const grand = useMemo(() => lots.reduce((a, l) => { if (!l.donated) { const c = calc(l, eventFee); a.lotTotal += c.total; a.fees += c.fee; a.commission += c.commission; a.net += c.net; } return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }), [lots, eventFee]);
   const byConsignor = useMemo(() => {
     const sortLot = (a, b) => Number(a.lotNo) - Number(b.lotNo) || a.lotNo.localeCompare(b.lotNo);
     const map = {}; lots.forEach((l) => { if (!l.donated) (map[l.consignor] ||= []).push(l); });
-    return Object.entries(map).map(([name, ls]) => { ls.sort(sortLot); const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }); return { name, ls, t, minLot: ls[0]?.lotNo ?? "" }; }).sort((a, b) => Number(a.minLot) - Number(b.minLot) || a.minLot.localeCompare(b.minLot));
+    return Object.entries(map).map(([name, ls]) => { ls.sort(sortLot); const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += c.total; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 }); return { name, ls, t, minLot: ls[0]?.lotNo ?? "" }; }).sort((a, b) => Number(a.minLot) - Number(b.minLot) || a.minLot.localeCompare(b.minLot));
   }, [lots, eventFee]);
   const saleCounts = useMemo(() => ({ All: lots.length, Live: lots.filter((l) => (l.saleType || "Live") === "Live").length, Silent: lots.filter((l) => l.saleType === "Silent").length }), [lots]);
   const shownByConsignor = useMemo(() => {
     if (saleFilter === "All") return byConsignor;
     return byConsignor.map((g) => {
       const ls = g.ls.filter((l) => (l.saleType || "Live") === saleFilter);
-      const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 });
+      const t = ls.reduce((a, l) => { const c = calc(l, eventFee); a.lotTotal += c.total; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { lotTotal: 0, fees: 0, commission: 0, net: 0 });
       return { ...g, ls, t };
     }).filter((g) => g.ls.length > 0);
   }, [byConsignor, saleFilter, eventFee]);
@@ -524,7 +533,8 @@ export default function AuctionSettlement() {
               <div className="f span2"><label>Ranch</label><input value={form.consignorRanch} onChange={(e) => setF("consignorRanch", e.target.value)} placeholder="Ranch" /></div>
               <div className="f span4"><label>Buyer name</label><input list="people-list" value={form.buyerName} onChange={(e) => onNameChange("buyer", e.target.value)} placeholder="Start typing…" /></div>
               <div className="f span2"><label>Ranch</label><input value={form.buyerRanch} onChange={(e) => setF("buyerRanch", e.target.value)} placeholder="Ranch" /></div>
-              <div className="f span3"><label>Sale amount</label><input value={form.amount} inputMode="decimal" onChange={(e) => setF("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="6000" /></div>
+              <div className="f span2"><label>Unit price</label><input value={form.amount} inputMode="decimal" onChange={(e) => setF("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="6000" /></div>
+              <div className="f span1"><label>Qty</label><input value={form.quantity} inputMode="numeric" onChange={(e) => setF("quantity", e.target.value.replace(/[^\d]/g, ""))} placeholder="1" /></div>
               <div className="f span3" style={{ justifyContent: "flex-end" }}><label className="chkrow"><input type="checkbox" checked={form.donated} onChange={(e) => setF("donated", e.target.checked)} /> 100% donation to {CFG.orgShort}</label></div>
               <div className="f span6" style={{ justifyContent: "flex-end", alignItems: "flex-end" }}><button className="btn" onClick={addLot}><Plus size={16} /> Add lot</button></div>
             </div>
@@ -540,12 +550,12 @@ export default function AuctionSettlement() {
               ))}
             </div>
             <div className="tblwrap"><table className="tbl">
-              <thead><tr><th>Lot</th><th>Description</th><th>Buyer</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th>Delivery</th><th>Check #</th><th>Date</th><th></th></tr></thead>
+              <thead><tr><th>Lot</th><th>Description</th><th>Buyer</th><th className="num">Unit $</th><th className="num">Qty</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th>Delivery</th><th>Check #</th><th>Date</th><th></th></tr></thead>
               <tbody>
                 {shownByConsignor.map((g) => (
                   <React.Fragment key={g.name}>
-                    <tr className="grp2"><td colSpan={14}>{g.name}</td></tr>
-                    {g.ls.map((l) => { const c = calc(l, eventFee); const status = l.checkNo ? "paid" : l.delivered ? "ready" : "wait"; const bidderNo = findBidder(l.buyerName); const balanceDue = l.amount - (l.amountPaid || 0); return (
+                    <tr className="grp2"><td colSpan={16}>{g.name}</td></tr>
+                    {g.ls.map((l) => { const c = calc(l, eventFee); const status = l.checkNo ? "paid" : l.delivered ? "ready" : "wait"; const bidderNo = findBidder(l.buyerName); const balanceDue = c.total - (l.amountPaid || 0); return (
                       <React.Fragment key={l.id}>
                       <tr>
                         <td className="lot">{l.lotNo}</td><td>{l.description || "—"}{l.saleType === "Silent" && <span className="badge" style={{background:"#e7eef0",color:"#2a5560",marginLeft:6}}>Silent</span>}</td>
@@ -553,7 +563,7 @@ export default function AuctionSettlement() {
                           <input className="buyer-in" list="people-list" value={l.buyerName} placeholder="Buyer name" onChange={(e) => onBuyerChange(l.id, e.target.value, l.buyerRanch)} />
                           {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
                         </td>
-                        <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
+                        <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td><td className="num"><input className="qty-in" inputMode="numeric" value={qtyOf(l)} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setLot(l.id, { quantity: Math.max(1, Number(v) || 1) }); }} /></td><td className="num" style={{fontWeight:700}}>{money(c.total)}</td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td>
                         <td className="num"><input className="amt-in" inputMode="decimal" value={l.amountPaid === 0 ? "" : l.amountPaid} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amountPaid: Number(v) || 0 }); }} /></td>
                         <td className="num" style={{fontWeight:700,color: balanceDue <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(Math.max(0, balanceDue))}</td>
                         <td><PayControls l={l} /></td>
@@ -567,7 +577,7 @@ export default function AuctionSettlement() {
                       </tr>
                       {editId === l.id && (
                         <tr className="edit-row">
-                          <td colSpan={14}>
+                          <td colSpan={16}>
                             <div className="edit-grid">
                               <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
                               <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
@@ -602,7 +612,7 @@ export default function AuctionSettlement() {
                         </tr>
                       )}
                       </React.Fragment>); })}
-                    <tr className="sub"><td colSpan={3}>Subtotal — {g.name}</td><td className="num">{money(g.t.lotTotal)}</td><td className="num">{money(g.t.fees)}</td><td className="num">{money(g.t.commission)}</td><td className="num">{money(g.t.net)}</td><td className="num">{money(g.ls.reduce((a,l)=>a+(l.amountPaid||0),0))}</td><td className="num" style={{fontWeight:700,color:"var(--warn)"}}>{money(Math.max(0,g.ls.reduce((a,l)=>a+(l.amount-(l.amountPaid||0)),0)))}</td><td colSpan={5}></td></tr>
+                    <tr className="sub"><td colSpan={5}>Subtotal — {g.name}</td><td className="num">{money(g.t.lotTotal)}</td><td className="num">{money(g.t.fees)}</td><td className="num">{money(g.t.commission)}</td><td className="num">{money(g.t.net)}</td><td className="num">{money(g.ls.reduce((a,l)=>a+(l.amountPaid||0),0))}</td><td className="num" style={{fontWeight:700,color:"var(--warn)"}}>{money(Math.max(0,g.ls.reduce((a,l)=>a+(lineTotal(l)-(l.amountPaid||0)),0)))}</td><td colSpan={5}></td></tr>
                   </React.Fragment>
                 ))}
               </tbody>
@@ -623,15 +633,15 @@ export default function AuctionSettlement() {
           const printConsignor = () => { const prev = document.title; document.title = `Consignor Ledger - ${sel} - ${CFG.eventName} 2026`; window.print(); setTimeout(() => { document.title = prev; }, 1000); };
           const donated = ls.filter((l) => l.donated), sold = ls.filter((l) => !l.donated);
           const soldWithBuyer = sold.filter((l) => l.buyerName), unsold = sold.filter((l) => !l.buyerName);
-          const donatedTotal = donated.reduce((a, l) => a + l.amount, 0);
-          const t = soldWithBuyer.reduce((a, l) => { const c = calc(l, eventFee); a.gross += l.amount; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { gross: 0, fees: 0, commission: 0, net: 0 });
+          const donatedTotal = donated.reduce((a, l) => a + lineTotal(l), 0);
+          const t = soldWithBuyer.reduce((a, l) => { const c = calc(l, eventFee); a.gross += c.total; a.fees += c.fee; a.commission += c.commission; a.net += c.net; return a; }, { gross: 0, fees: 0, commission: 0, net: 0 });
           return (<>
             <div className="bar"><select className="sel" value={sel} onChange={(e) => setConsignorSel(e.target.value)}>{consignors.map((c) => <option key={c}>{c}</option>)}</select><button className="btn ghost" onClick={printConsignor}><Printer size={15} /> Print / PDF</button></div>
             <div className="ledger">
               <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">{`Consignor Ledger · ${CFG.eventName} 2026`}</div></div><div style={{ textAlign: "right" }}><div className="whosub">Net due once delivered</div><div className="who serif" style={{ color: "var(--pine)" }}>{money(t.net)}</div></div></div>
-              {donated.length > 0 && (<><div className="secLabel">Lots Donated (100% to {CFG.orgShort})</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th></tr></thead><tbody>{donated.map((l) => { const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td>{l.buyer}{buyerContact(l.buyerName)}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td></tr>; })}<tr className="sub"><td colSpan={4}>Donated total</td><td className="num">{money(donatedTotal)}</td></tr></tbody></table></>)}
-              {soldWithBuyer.length > 0 && (<><div className="secLabel">Lots Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Comm.</th><th className="num">Net</th></tr></thead><tbody>{soldWithBuyer.map((l) => { const c = calc(l, eventFee); const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.buyer}{buyerContact(l.buyerName)}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{money(l.amount)}</td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td></tr>; })}</tbody></table></>)}
-              {unsold.length > 0 && (<><div className="secLabel" style={{color:"var(--inkSoft)"}}>Lots Not Yet Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th className="num">List price</th><th className="num">Net</th></tr></thead><tbody>{unsold.map((l) => <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td className="num" style={{color:"var(--inkSoft)"}}>{money(l.amount)}</td><td className="num donated">$0.00</td></tr>)}</tbody></table></>)}
+              {donated.length > 0 && (<><div className="secLabel">Lots Donated (100% to {CFG.orgShort})</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Qty</th><th className="num">Lot total</th></tr></thead><tbody>{donated.map((l) => { const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td>{l.buyer}{buyerContact(l.buyerName)}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{qtyOf(l)}</td><td className="num">{money(lineTotal(l))}</td></tr>; })}<tr className="sub"><td colSpan={5}>Donated total</td><td className="num">{money(donatedTotal)}</td></tr></tbody></table></>)}
+              {soldWithBuyer.length > 0 && (<><div className="secLabel">Lots Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Sold to</th><th>Bidder #</th><th className="num">Qty</th><th className="num">Lot total</th><th className="num">Fee</th><th className="num">Comm.</th><th className="num">Net</th></tr></thead><tbody>{soldWithBuyer.map((l) => { const c = calc(l, eventFee); const bn = findBidder(l.buyerName); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.buyer}{buyerContact(l.buyerName)}</td><td style={{fontWeight:700,color:"var(--pine)"}}>{bn || "—"}</td><td className="num">{qtyOf(l)}</td><td className="num">{money(c.total)}</td><td className="num">{money(c.fee)}</td><td className="num">{money(c.commission)}</td><td className="num net">{money(c.net)}</td></tr>; })}</tbody></table></>)}
+              {unsold.length > 0 && (<><div className="secLabel" style={{color:"var(--inkSoft)"}}>Lots Not Yet Sold</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th className="num">Qty</th><th className="num">List price</th><th className="num">Net</th></tr></thead><tbody>{unsold.map((l) => <tr key={l.id}><td className="lot">{l.lotNo}</td><td className="donated">{l.description || "—"}</td><td className="num" style={{color:"var(--inkSoft)"}}>{qtyOf(l)}</td><td className="num" style={{color:"var(--inkSoft)"}}>{money(lineTotal(l))}</td><td className="num donated">$0.00</td></tr>)}</tbody></table></>)}
               <div style={{ maxWidth: 360, marginLeft: "auto", marginTop: 18 }}>
                 <div className="totline"><span>Gross lot total</span><span>{money(t.gross)}</span></div>
                 <div className="totline"><span>Lot fees</span><span>{money(t.fees)}</span></div>
@@ -644,7 +654,7 @@ export default function AuctionSettlement() {
 
         {tab === "grand" && (() => {
           const grandLots = lots.filter((l) => l.category === "Grand Auction").sort((a, b) => Number(a.lotNo) - Number(b.lotNo));
-          const totSold = grandLots.reduce((a, l) => a + l.amount, 0);
+          const totSold = grandLots.reduce((a, l) => a + lineTotal(l), 0);
           const withBuyer = grandLots.filter((l) => l.buyerName).length;
           return (<>
             <div className="addcard">
@@ -656,7 +666,8 @@ export default function AuctionSettlement() {
                 <div className="f span2"><label>Ranch</label><input value={form.consignorRanch} onChange={(e) => setF("consignorRanch", e.target.value)} placeholder="Ranch" /></div>
                 <div className="f span4"><label>Buyer name</label><input list="people-list" value={form.buyerName} onChange={(e) => onNameChange("buyer", e.target.value)} placeholder="Start typing…" /></div>
                 <div className="f span2"><label>Ranch</label><input value={form.buyerRanch} onChange={(e) => setF("buyerRanch", e.target.value)} placeholder="Ranch" /></div>
-                <div className="f span3"><label>Sale amount</label><input value={form.amount} inputMode="decimal" onChange={(e) => setF("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="6000" /></div>
+                <div className="f span2"><label>Unit price</label><input value={form.amount} inputMode="decimal" onChange={(e) => setF("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="6000" /></div>
+                <div className="f span1"><label>Qty</label><input value={form.quantity} inputMode="numeric" onChange={(e) => setF("quantity", e.target.value.replace(/[^\d]/g, ""))} placeholder="1" /></div>
                 <div className="f span3" style={{ justifyContent: "flex-end", alignItems: "flex-end" }}><button className="btn" onClick={addGrandLot}><Plus size={16} /> Add lot</button></div>
               </div>
               {grandFormErr && <div className="hint" style={{color:"var(--warn)",marginTop:10}}><AlertTriangle size={13}/> {grandFormErr}</div>}
@@ -671,9 +682,9 @@ export default function AuctionSettlement() {
                 <button className="btn ghost" onClick={() => window.print()}><Printer size={15}/> Print / PDF</button>
               </div>
               <div className="tblwrap"><table className="tbl">
-                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Amount</th><th className="num">Fee</th><th style={{textAlign:"center"}}>Animal</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th></th></tr></thead>
+                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Unit $</th><th className="num">Qty</th><th className="num">Lot total</th><th className="num">Fee</th><th style={{textAlign:"center"}}>Animal</th><th className="num">Commission</th><th className="num">Net (check)</th><th className="num">Amt Paid</th><th className="num">Balance Due</th><th>Buyer Paid</th><th></th></tr></thead>
                 <tbody>
-                  {grandLots.map((l) => { const c = calc(l, eventFee); const bidderNo = findBidder(l.buyerName); const balanceDue = l.amount - (l.amountPaid || 0); return (
+                  {grandLots.map((l) => { const c = calc(l, eventFee); const bidderNo = findBidder(l.buyerName); const balanceDue = c.total - (l.amountPaid || 0); return (
                     <React.Fragment key={l.id}>
                     <tr style={!l.buyerName ? {background:"#fff0e6",outline:"1px solid #f5c9a0"} : {}}>
                       <td className="lot">{l.lotNo}</td>
@@ -684,6 +695,8 @@ export default function AuctionSettlement() {
                         {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
                       </td>
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td>
+                      <td className="num"><input className="qty-in" inputMode="numeric" value={qtyOf(l)} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setLot(l.id, { quantity: Math.max(1, Number(v) || 1) }); }} /></td>
+                      <td className="num" style={{fontWeight:700}}>{money(c.total)}</td>
                       <td className="num">{money(c.fee)}</td>
                       <td style={{textAlign:"center"}}><input type="checkbox" checked={!!l.animalSale} title="Includes an animal sale — apply commission" onChange={(e) => setLot(l.id, { animalSale: e.target.checked })} /></td>
                       <td className="num">{money(c.commission)}</td>
@@ -698,7 +711,7 @@ export default function AuctionSettlement() {
                     </tr>
                     {editId === l.id && (
                       <tr className="edit-row">
-                        <td colSpan={13}>
+                        <td colSpan={15}>
                           <div className="edit-grid">
                             <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
                             <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
@@ -726,7 +739,7 @@ export default function AuctionSettlement() {
 
         {tab === "donated" && (() => {
           const donatedLots = lots.filter((l) => l.donated || l.category === "Donated").sort((a, b) => Number(a.lotNo) - Number(b.lotNo) || String(a.lotNo).localeCompare(String(b.lotNo)));
-          const totVal = donatedLots.reduce((a, l) => a + (l.amount || 0), 0);
+          const totVal = donatedLots.reduce((a, l) => a + lineTotal(l), 0);
           return (<>
             <div className="bar" style={{justifyContent:"space-between"}}>
               <span style={{fontSize:13,fontWeight:600,color:"var(--inkSoft)"}}>
@@ -738,7 +751,7 @@ export default function AuctionSettlement() {
               <div className="empty"><div className="big">No donated items</div>Items marked “100% donation” on the Payment Detail or Grand Auction tab show up here to view and remove.</div>
             ) : (<>
               <div className="tblwrap"><table className="tbl">
-                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Value</th><th></th></tr></thead>
+                <thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th>Buyer</th><th className="num">Unit $</th><th className="num">Qty</th><th className="num">Value</th><th></th></tr></thead>
                 <tbody>
                   {donatedLots.map((l) => { const bidderNo = findBidder(l.buyerName); return (
                     <React.Fragment key={l.id}>
@@ -751,6 +764,8 @@ export default function AuctionSettlement() {
                         {bidderNo && <span style={{fontSize:11,fontWeight:700,color:"var(--pine)",marginLeft:5}}>#{bidderNo}</span>}
                       </td>
                       <td className="num"><input className="amt-in" inputMode="decimal" value={l.amount === 0 ? "" : l.amount} placeholder="0.00" onChange={(e) => { const v = e.target.value.replace(/[^\d.]/g, ""); setLot(l.id, { amount: Number(v) || 0 }); }} /></td>
+                      <td className="num"><input className="qty-in" inputMode="numeric" value={qtyOf(l)} onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setLot(l.id, { quantity: Math.max(1, Number(v) || 1) }); }} /></td>
+                      <td className="num" style={{fontWeight:700}}>{money(lineTotal(l))}</td>
                       <td style={{whiteSpace:"nowrap"}}>
                         <button className="edit-btn" title="Edit item" onClick={() => editId === l.id ? cancelEdit() : startEdit(l)}>{editId === l.id ? <X size={15}/> : <Pencil size={15}/>}</button>
                         <button className="trash" title="Delete item" onClick={() => delLot(l.id)}><Trash2 size={15}/></button>
@@ -758,7 +773,7 @@ export default function AuctionSettlement() {
                     </tr>
                     {editId === l.id && (
                       <tr className="edit-row">
-                        <td colSpan={6}>
+                        <td colSpan={8}>
                           <div className="edit-grid">
                             <div className="f"><label>Lot #</label><input className="mini" style={{width:"100%"}} value={editForm.lotNo} onChange={(e) => setEF("lotNo", e.target.value)} /></div>
                             <div className="f"><label>Description</label><input style={{fontFamily:"inherit",fontSize:"13px",padding:"6px 8px",border:"1.5px solid var(--line)",borderRadius:"8px",width:"100%"}} value={editForm.description} onChange={(e) => setEF("description", e.target.value)} /></div>
@@ -792,7 +807,7 @@ export default function AuctionSettlement() {
           const sel = buyerSel || buyers[0] || "";
           const ls = lots.filter((l) => l.buyer === sel);
           const byCat = {}; ls.forEach((l) => { (byCat[l.category] ||= []).push(l); });
-          const lotTotal = ls.reduce((a, l) => a + l.amount, 0);
+          const lotTotal = ls.reduce((a, l) => a + lineTotal(l), 0);
           const totalPaid = ls.reduce((a, l) => a + (l.amountPaid || 0), 0);
           const totalBalance = Math.max(0, lotTotal - totalPaid);
           const selBidder = findBidder(ls[0]?.buyerName || "");
@@ -801,7 +816,7 @@ export default function AuctionSettlement() {
             <div className="bar"><select className="sel" value={sel} onChange={(e) => setBuyerSel(e.target.value)}>{buyers.map((b) => <option key={b}>{b}</option>)}</select><button className="btn ghost" onClick={printBuyer}><Printer size={15} /> Print / PDF</button></div>
             <div className="ledger">
               <div className="lh"><div><div className="who serif">{sel}</div><div className="whosub">{`Buyer Ledger · ${CFG.eventName} 2026`}{selBidder ? ` · Bidder #${selBidder}` : ""}</div></div><div style={{ textAlign: "right" }}><div className="whosub">Balance due</div><div className="who serif" style={{ color: totalBalance > 0 ? "var(--warn)" : "var(--ok)" }}>{money(totalBalance)}</div></div></div>
-              {Object.entries(byCat).map(([cat, items]) => { const sub = items.reduce((a, l) => a + l.amount, 0); const subPaid = items.reduce((a, l) => a + (l.amountPaid || 0), 0); const subBal = Math.max(0, sub - subPaid); return (<div key={cat}><div className="secLabel">{cat}</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th className="num">Amount</th><th className="num">Amt Paid</th><th className="num">Balance Due</th></tr></thead><tbody>{items.map((l) => { const bal = Math.max(0, l.amount - (l.amountPaid || 0)); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.consignor}</td><td className="num">{money(l.amount)}</td><td className="num">{money(l.amountPaid || 0)}</td><td className="num" style={{fontWeight:700,color: bal <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(bal)}</td></tr>; })}<tr className="sub"><td colSpan={3}>{cat} subtotal</td><td className="num">{money(sub)}</td><td className="num">{money(subPaid)}</td><td className="num" style={{color:"var(--warn)",fontWeight:700}}>{money(subBal)}</td></tr></tbody></table></div>); })}
+              {Object.entries(byCat).map(([cat, items]) => { const sub = items.reduce((a, l) => a + lineTotal(l), 0); const subPaid = items.reduce((a, l) => a + (l.amountPaid || 0), 0); const subBal = Math.max(0, sub - subPaid); return (<div key={cat}><div className="secLabel">{cat}</div><table className="tbl"><thead><tr><th>Lot</th><th>Description</th><th>Consignor</th><th className="num">Qty</th><th className="num">Lot total</th><th className="num">Amt Paid</th><th className="num">Balance Due</th></tr></thead><tbody>{items.map((l) => { const bal = Math.max(0, lineTotal(l) - (l.amountPaid || 0)); return <tr key={l.id}><td className="lot">{l.lotNo}</td><td>{l.description || "—"}</td><td>{l.consignor}</td><td className="num">{qtyOf(l)}</td><td className="num">{money(lineTotal(l))}</td><td className="num">{money(l.amountPaid || 0)}</td><td className="num" style={{fontWeight:700,color: bal <= 0 ? "var(--ok)" : "var(--warn)"}}>{money(bal)}</td></tr>; })}<tr className="sub"><td colSpan={4}>{cat} subtotal</td><td className="num">{money(sub)}</td><td className="num">{money(subPaid)}</td><td className="num" style={{color:"var(--warn)",fontWeight:700}}>{money(subBal)}</td></tr></tbody></table></div>); })}
               <div style={{ maxWidth: 420, marginLeft: "auto", marginTop: 18 }}>
                 <div className="totline"><span>Total lot amount</span><span>{money(lotTotal)}</span></div>
                 <div className="totline"><span>Amount paid</span><span>{money(totalPaid)}</span></div>
@@ -815,10 +830,10 @@ export default function AuctionSettlement() {
           const fmt2 = (n) => Number(n).toFixed(2);
 
           const exportAllLots = () => {
-            const hdr = ["Lot #","Description","Category","Sale Type","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
+            const hdr = ["Lot #","Description","Category","Sale Type","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Unit Price","Qty","Lot Total","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
             const rows = [...lots].sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
               const c=calc(l,eventFee);
-              return [l.lotNo,l.description,l.category,l.saleType||"Live",l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),fmt2(l.amount),fmt2(c.fee),fmt2(c.commission),fmt2(c.net),fmt2(l.amountPaid||0),fmt2(Math.max(0,l.amount-(l.amountPaid||0))),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+              return [l.lotNo,l.description,l.category,l.saleType||"Live",l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),fmt2(l.amount),qtyOf(l),fmt2(c.total),fmt2(c.fee),fmt2(c.commission),fmt2(c.net),fmt2(l.amountPaid||0),fmt2(Math.max(0,c.total-(l.amountPaid||0))),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
             });
             downloadCsv("lots-all.csv",[hdr,...rows]);
           };
@@ -828,7 +843,7 @@ export default function AuctionSettlement() {
             const map = {};
             lots.forEach((l)=>{ if(!l.buyerName) return; (map[l.buyerName]||=([])).push(l); });
             const rows = Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,ls])=>{
-              const total=ls.reduce((a,l)=>a+l.amount,0);
+              const total=ls.reduce((a,l)=>a+lineTotal(l),0);
               const paid=ls.reduce((a,l)=>a+(l.amountPaid||0),0);
               return [name,findBidder(name),findRanch(name),ls.length,fmt2(total),fmt2(paid),fmt2(Math.max(0,total-paid))];
             });
@@ -882,25 +897,25 @@ export default function AuctionSettlement() {
               XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([regHdr,...regRows]), "Registrants");
 
               // Sheet 2: All Lots
-              const lotHdr = ["Lot #","Description","Category","Sale Type","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
+              const lotHdr = ["Lot #","Description","Category","Sale Type","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Unit Price","Qty","Lot Total","Lot Fee","Commission","Net (Check)","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"];
               const lotRows = [...lots].sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
                 const c=calc(l,eventFee);
-                return [l.lotNo,l.description,l.category,l.saleType||"Live",l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,c.fee,c.commission,c.net,l.amountPaid||0,Math.max(0,l.amount-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+                return [l.lotNo,l.description,l.category,l.saleType||"Live",l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,qtyOf(l),c.total,c.fee,c.commission,c.net,l.amountPaid||0,Math.max(0,c.total-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
               });
               XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([lotHdr,...lotRows]), "All Lots");
 
               // Sheet 3: Grand Auction
               const grandRows = lots.filter(l=>l.category==="Grand Auction").sort((a,b)=>Number(a.lotNo)-Number(b.lotNo)||a.lotNo.localeCompare(b.lotNo)).map((l)=>{
                 const c=calc(l,eventFee);
-                return [l.lotNo,l.description,l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,c.fee,l.amountPaid||0,Math.max(0,l.amount-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
+                return [l.lotNo,l.description,l.consignorName,l.consignorRanch,l.buyerName,l.buyerRanch,findBidder(l.buyerName),l.amount,qtyOf(l),c.total,c.fee,l.amountPaid||0,Math.max(0,c.total-(l.amountPaid||0)),l.buyerPaid?"Yes":"No",l.delivered?"Yes":"No",l.checkNo,l.checkDate];
               });
-              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Lot #","Description","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Sale Amount","Lot Fee","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"],...grandRows]), "Grand Auction");
+              XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Lot #","Description","Consignor","Consignor Ranch","Buyer","Buyer Ranch","Bidder #","Unit Price","Qty","Lot Total","Lot Fee","Amt Paid","Balance Due","Buyer Paid","Delivered","Check #","Check Date"],...grandRows]), "Grand Auction");
 
               // Sheet 4: Buyers Summary
               const buyerMap = {};
               lots.forEach((l)=>{ if(!l.buyerName) return; (buyerMap[l.buyerName]||=[]).push(l); });
               const buyerRows = Object.entries(buyerMap).sort((a,b)=>a[0].localeCompare(b[0])).map(([name,ls])=>{
-                const total=ls.reduce((a,l)=>a+l.amount,0);
+                const total=ls.reduce((a,l)=>a+lineTotal(l),0);
                 const paid=ls.reduce((a,l)=>a+(l.amountPaid||0),0);
                 return [name,findBidder(name),findRanch(name),ls.length,total,paid,Math.max(0,total-paid)];
               });
